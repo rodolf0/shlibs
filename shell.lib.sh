@@ -81,25 +81,4 @@ function color_print {
   echo -e "${!color}$@${NC}"
 }
 
-
-# finds empty dirs and files that are older than maxdays and removes them
-function remove_aged_files {
-  local basepath="$1"
-  local maxdays="$2"
-  local realrun="$3"
-
-  if [ $# -lt 2 ]; then
-    echo "use: remove_aged_files <path> <maxdays> [doit]"
-    return 1
-  fi
-
-  if [ -d "$basepath" ]; then
-    if [ "$realrun" = doit ]; then
-      find "$basepath" -xdev ! -type d -ctime +$maxdays -exec rm -f {} \;
-      find "$basepath" -depth -xdev -type d -empty -exec rmdir {} \;
-    else
-      find "$basepath" -xdev ! -type d -ctime +$maxdays
-      find "$basepath" -depth -xdev -type d -empty
-    fi
-  fi
-}
+# vim: set sw=2 sts=2 : #
