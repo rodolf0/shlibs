@@ -35,7 +35,7 @@ function push_subdivx_subtitles {
     done
   done
   if [ $(ls $tmpdir/*.{srt,sub} 2>/dev/null | wc -l) -gt 0 ]; then
-    scp $tmpdir/*.{srt,sub} $torrent_server:/tmp/
+    scp $tmpdir/*.{srt,sub} $torrent_server:/mnt/media/subtitles
   fi
   rm -rf $tmpdir
 }
