@@ -60,4 +60,32 @@ function remove_aged_files {
   fi
 }
 
+
+# monitor a file until it changes or is deleted and execute an action
+function watch_file {
+  if [ $# -lt 2 -o ! -e "$1" ]; then
+    echo "use: watch_file <path> action act-args..."
+    return 1
+  fi
+
+  local fname="$1"; shift
+  local ctime=$(stat -c %Z "$fname")
+  local sha1s=$(sha1sum "$fname" | sed 's/ .*$//')
+  local pollsecs=5
+
+  echo "Watching $fname (last change: $ctime) sha1: $sha1s" >&2
+
+  while sleep $pollsecs; do
+    if [ ! -e "$fname" ]; then
+        "$@"; break
+    elif [ "$(stat -c %Z "$fname")" != "$ctime" ]; then
+      if [ "$(sha1sum "$fname" | sed 's/ .*$//')" != "$sha1s" ]; then
+        "$@"; break
+      else
+        ctime=$(stat -c %Z "$fname")
+      fi
+    fi
+  done
+}
+
 # vim: set sw=2 sts=2 : #

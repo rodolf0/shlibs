@@ -39,7 +39,7 @@ function ext_cluster {
 
 function map {
   local func="$@"
-  while read line; do 
+  while read line; do
     $func "$line"
   done
 }
