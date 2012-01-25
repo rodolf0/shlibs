@@ -35,11 +35,3 @@ function ext_cluster {
   local callback="$1"; shift
   _foreach_cluster 's/^\(.*/\)\?[^.]*\.//' "$callback" "$@"
 }
-
-
-function map {
-  local func="$@"
-  while read line; do
-    $func "$line"
-  done
-}
