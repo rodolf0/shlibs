@@ -16,3 +16,13 @@ function tz_calc {
 
    TZ="$tz_dest" date -d "$(TZ="$tz_orig" date -d "$tm" "+%F %T %z")" "$@"
 }
+
+# get the first day of the current month (a format string can be appended)
+function months_first_day {
+  date -d "-$(date +%d) days +1 day" "$@"
+}
+
+# get the last day of the current month (a format string can be appended)
+function months_last_day {
+  date -d "-$(date +%d) days +1 month" "$@"
+}
