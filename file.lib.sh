@@ -26,7 +26,7 @@ function make_shar_ball {
 set -e
 exedir=\$(mktemp -d)
 tail -n +9 \$0 | tar zxf - -C \$exedir
-\$exedir/$entrypoint; ret=\$?
+\$exedir/$entrypoint "\$@"; ret=\$?
 rm -rf \$exedir
 exit \$ret
 #===============================
