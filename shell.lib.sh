@@ -81,4 +81,17 @@ function color_print {
   echo -e "${!color}$@${NC}"
 }
 
+
+# highlight some regex within stdout
+function highlight {
+  local expr1="${1:-$RANDOM$RANDOM}"; shift
+  local expr2="${1:-$RANDOM$RANDOM}"; shift
+  local expr3="${1:-$RANDOM$RANDOM}"; shift
+  local expr4="${1:-$RANDOM$RANDOM}"; shift
+  sed -e 's!\('${expr1}'\)!'$'\e''[31m\1'$'\e''[0m!g' \
+      -e 's!\('${expr2}'\)!'$'\e''[32m\1'$'\e''[0m!g' \
+      -e 's!\('${expr3}'\)!'$'\e''[33m\1'$'\e''[0m!g' \
+      -e 's!\('${expr4}'\)!'$'\e''[34m\1'$'\e''[0m!g'
+}
+
 # vim: set sw=2 sts=2 : #
