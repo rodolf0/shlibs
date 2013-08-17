@@ -94,4 +94,19 @@ function highlight {
       -e 's!\('${expr4}'\)!'$'\e''[34m\1'$'\e''[0m!g'
 }
 
+
+export __MARKPATH=$HOME/.marks
+function jump {
+  cd -P $__MARKPATH/$1 2>/dev/null || echo "No such mark: $1"
+}
+function mark {
+  mkdir -p $__MARKPATH; ln -s $(pwd) $__MARKPATH/$1
+}
+function unmark {
+  rm -i $__MARKPATH/$1
+}
+function marks {
+  ls -l $__MARKPATH | sed 's/  / /g' | cut -d' ' -f9- | sed 's/ -/\t-/g' && echo
+}
+
 # vim: set sw=2 sts=2 : #
