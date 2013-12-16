@@ -1,12 +1,10 @@
 #!/bin/bash
 
-
 # kill a whole process group
 function gkill {
   [ $# -eq 1 ] &&
   kill -TERM -$(ps -p $1 -o pgid --no-headers)
 }
-
 
 # check how many days since the data last changed
 function file_data_age {
@@ -19,20 +17,17 @@ function file_data_age {
   done
 }
 
-
 # check if a pid is alive
 function pid_is_alive {
   [ $# -eq 1 ] &&
   ps h -p $1 &> /dev/null
 }
 
-
 # exit a script with verbose output to stder
 function die {
   echo "$0: $@" >&2
   exit 1
 }
-
 
 # check that only one script executes with a user chosen lock-file
 # if the file exists but the pid is no longer alive the script may run
@@ -65,7 +60,6 @@ function assert_single_instance {
   return 1
 }
 
-
 # print something in color (first arg indicates color)
 function color_print {
   local red='\e[0;31m'
@@ -81,7 +75,6 @@ function color_print {
   echo -e "${!color}$@${NC}"
 }
 
-
 # highlight some regex within stdout
 function highlight {
   local expr1="${1:-$RANDOM$RANDOM}"; shift
@@ -94,7 +87,7 @@ function highlight {
       -e 's!\('${expr4}'\)!'$'\e''[34m\1'$'\e''[0m!g'
 }
 
-
+# print most frequently used n commands
 function topcmd {
   local count="${1:-20}"; shift
   history |
@@ -104,6 +97,17 @@ function topcmd {
     head -"$count"
 }
 
+# clone stdout to a file
+function logoutput {
+  local logfile="$1"; shift
+  local fifo=$(mktemp -u)
+  mkfifo "$fifo"
+  exec 64>&1
+  { tee "$logfile" < "$fifo" >&64; rm -f "$fifo"; } &
+  local teepid=$!
+  exec > "$fifo"
+  echo "run 'exec >&64 64>&-; wait $teepid' to end logging"
+}
 
 export __MARKPATH=$HOME/.marks
 function j {
