@@ -95,6 +95,16 @@ function highlight {
 }
 
 
+function topcmd {
+  local count="${1:-20}"; shift
+  history |
+    awk '{ freq[$2]++ } END { for (cmd in freq) print freq[cmd] ":" cmd }' |
+    sort -t: -k1nr,1n |
+    sed 's/^[0-9]*://' |
+    head -"$count"
+}
+
+
 export __MARKPATH=$HOME/.marks
 function j {
   cd -P $__MARKPATH/$1 2>/dev/null || echo "No such mark: $1"
