@@ -99,6 +99,10 @@ function topcmd {
 
 # clone stdout to a file
 function logoutput {
+  if [ $# -lt 1 ]; then
+    echo "usage: logoutput <logfile>" >&2
+    return 1
+  fi
   local logfile="$1"; shift
   local fifo=$(mktemp -u)
   mkfifo "$fifo"
@@ -106,7 +110,13 @@ function logoutput {
   { tee "$logfile" < "$fifo" >&64; rm -f "$fifo"; } &
   local teepid=$!
   exec > "$fifo"
-  echo "run 'exec >&64 64>&-; wait $teepid' to end logging"
+
+  function _stop_logging {
+    exec >&64 64>&-
+    wait $teepid
+    unset _stop_logging
+  }
+  echo "run _stop_logging to end" >&2
 }
 
 export __MARKPATH=$HOME/.marks
