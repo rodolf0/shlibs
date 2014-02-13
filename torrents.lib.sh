@@ -4,7 +4,7 @@
 function push_torrents {
   local search_dirs=(~/tmp ~/Downloads ~/Descargas /tmp)
   local torrent_server=warzone3.com.ar
-  local blacksmith_torrent_dir=/mnt/media/torrents/autoload
+  local blacksmith_torrent_dir=/data/torrents/autoload
 
   for sdir in ${search_dirs[@]}; do
     ls "$sdir"/*.torrent &>/dev/null &&
