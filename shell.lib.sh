@@ -42,7 +42,7 @@ function assert_single_instance {
   local remove="$2"
 
   if [ -f "$lockfile" ]; then
-    if ps -p $(cat "$lockfile") --no-headers &> /dev/null; then
+    if ps -p $(cat "$lockfile") &> /dev/null; then
       echo "assert_single_instance: process already running" >&2
       return 1
     elif [ "$remove" != remove-stale ]; then
