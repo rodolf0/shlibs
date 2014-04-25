@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 
-
 # Creates a self-extracting shell archive containing all contents of
 # a directory. When run it will extract to a temporary directory and
 # execute a file named main.sh
-
 function make_shar_ball {
   local sourcedir="$(readlink -f "$1")"
   local entrypoint="${2:-main.sh}"
@@ -35,6 +33,18 @@ EOF
   > "$outscript" &&
   chmod +x "$outscript" &&
   echo "$outscript created" >&2
+}
+
+
+# check how many days since the data last changed
+function file_data_age {
+  if [ $# -lt 1 ]; then
+    echo "Usage: data_age <filename> (days since the data was last modified)"
+    return 1
+  fi
+  for f in "$@"; do
+    echo $f:$(( ($(date +%s) - $(stat -c %Y "$f")) / 86400 ))
+  done
 }
 
 

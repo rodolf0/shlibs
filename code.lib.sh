@@ -13,5 +13,5 @@ function cgrep {
       -iregex '.*\.pm\|.*\.pl' -o \
       -iname '*.go' \
       \) -type f -print0 |
-    xargs -0 -r egrep "$@"
+    xargs -0 egrep "$@"
 }

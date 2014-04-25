@@ -3,22 +3,11 @@
 # kill a whole process group
 function gkill {
   [ $# -eq 1 ] &&
-  kill -TERM -$(ps -p $1 -o pgid --no-headers)
-}
-
-# check how many days since the data last changed
-function file_data_age {
-  if [ $# -lt 1 ]; then
-    echo "Usage: data_age <filename> (days since the data was last modified)"
-    return 1
-  fi
-  for f in "$@"; do
-    echo $f:$(( ($(date +%s) - $(stat -c %Y "$f")) / 86400 ))
-  done
+  kill -TERM -$(ps -p "$1" -o pgid --no-headers)
 }
 
 # check if a pid is alive
-function pid_is_alive {
+function pid_alive {
   [ $# -eq 1 ] &&
   ps h -p $1 &> /dev/null
 }
@@ -61,30 +50,41 @@ function assert_single_instance {
 }
 
 # print something in color (first arg indicates color)
-function color_print {
-  local red='\e[0;31m'
-  local RED='\e[1;31m'
-  local green='\e[0;32m'
-  local GREEN='\e[1;32m'
-  local blue='\e[0;34m'
-  local BLUE='\e[1;34m'
-  local cyan='\e[0;36m'
-  local CYAN='\e[1;36m'
-  local NC='\e[0m'
+function cprint {
+  if [ $# -lt 2 ]; then
+    echo "usage: cprint <color> text..." >&2
+    return 1
+  fi
+  local red=$'\e''[0;31m'
+  local RED=$'\e''[1;31m'
+  local green=$'\e''[0;32m'
+  local GREEN=$'\e''[1;32m'
+  local yellow=$'\e''[0;33m'
+  local YELLOW=$'\e''[1;33m'
+  local blue=$'\e''[0;34m'
+  local BLUE=$'\e''[1;34m'
+  local magenta=$'\e''[0;35m'
+  local MAGENTA=$'\e''[1;35m'
+  local cyan=$'\e''[0;36m'
+  local CYAN=$'\e''[1;36m'
+  local gray=$'\e''[0;37m'
+  local GRAY=$'\e''[1;37m'
+  local NC=$'\e''[0m'
   local color="$1"; shift
   echo -e "${!color}$@${NC}"
 }
 
 # highlight some regex within stdout
 function highlight {
-  local expr1="${1:-$RANDOM$RANDOM}"; shift
-  local expr2="${1:-$RANDOM$RANDOM}"; shift
-  local expr3="${1:-$RANDOM$RANDOM}"; shift
-  local expr4="${1:-$RANDOM$RANDOM}"; shift
-  sed -e 's!\('${expr1}'\)!'$'\e''[31m\1'$'\e''[0m!g' \
-      -e 's!\('${expr2}'\)!'$'\e''[32m\1'$'\e''[0m!g' \
-      -e 's!\('${expr3}'\)!'$'\e''[33m\1'$'\e''[0m!g' \
-      -e 's!\('${expr4}'\)!'$'\e''[34m\1'$'\e''[0m!g'
+  local sede=()
+  local i=1
+  while [ "$1" ]; do
+    local nexpr='s!\('$1'\)!'$'\e''['$((30+$i%8))'m\1'$'\e''[0m!g'
+    sede=("${sede[@]}" "-e '$nexpr'")
+    shift
+    ((i++))
+  done
+  eval sed "${sede[@]}"
 }
 
 # print most frequently used n commands
@@ -119,30 +119,25 @@ function logoutput {
   echo "run _stop_logging to end" >&2
 }
 
-export __MARKPATH=$HOME/.marks
-function j {
-  cd -P $__MARKPATH/$1 2>/dev/null || echo "No such mark: $1"
-}
-function mark {
-  mkdir -p $__MARKPATH; ln -s $(pwd) $__MARKPATH/$1
-}
-function unmark {
-  rm -i $__MARKPATH/$1
-}
-function marks {
-  ls -l $__MARKPATH | awk '/->/ {printf "%-15s -> %s\n", $9, $11}'
-}
-function _jcompgen {
-  local cur=${COMP_WORDS[COMP_CWORD]}
-  COMPREPLY=()
-  if [ $(ls -1 $__MARKPATH 2>/dev/null | sed "/^$cur/!d" | wc -l) -eq 1 ]; then
-    COMPREPLY=($(ls -1 $__MARKPATH | sed "/^$cur/!d"))
-    return
+# find file in current directory or parents recursively
+function pfind {
+  local sdir=.
+  local fname=
+  if [ $# -eq 1 ]; then
+    fname="$1"
+  elif [ $# -eq 2 ]; then
+    sdir="$1"
+    fname="$2"
+  else
+    echo "usage: pfind [start-dir] <fname>" >&2
+    return 1
   fi
-  while read l; do
-    COMPREPLY=("${COMPREPLY[@]}" "$l")
-  done < <(marks | sed "/^$cur/!d")
+
+  (cd "$sdir"
+    while [ "$PWD" != '/' ] && [ ! -e "$fname" ]; do cd ..; done
+    if [ -e "$fname" ]; then
+      echo "$PWD"
+    fi)
 }
-complete -o nospace -F _jcompgen j
 
 # vim: set sw=2 sts=2 : #
