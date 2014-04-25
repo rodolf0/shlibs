@@ -15,3 +15,16 @@ function cgrep {
       \) -type f -print0 |
     xargs -0 egrep "$@"
 }
+
+
+function build {
+  # try to build Makefile based project
+  local bdir=$(pfind build)
+  if [ "$bdir" -a -f "$bdir/build/Makefile" ]; then
+    make -C "$bdir/build"
+    return
+  fi
+
+  echo "Don't know how" >&2
+  return 1
+}
