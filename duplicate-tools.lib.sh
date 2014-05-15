@@ -5,49 +5,35 @@ function __file_filter {
 }
 
 function calculate_shas {
+  if [ $# -lt 1 ]; then
+    echo "usage: calculate_shas <base-dir>" >&2
+    return 1
+  fi
   local base="$1"; shift
   find "$base" -type f -exec sha1sum {} \; |
     __file_filter |
     sort -t $'\x20' -k1,1
 }
 
-function find_uniques {
-  local shafile="$1"; shift
-  cat "$shafile" |
-    sort -t $'\x20' -k 1,1 |
-    funiq -d $'\x20' -f 1
-}
-
 function find_dups {
-  local allshas="$1"; shift
-  local uniqshas="$1"; shift
-  filterkeys -f <(comm -32 "$allshas" "$uniqshas" | # dup shas
-                  reorder -d $'\x20' -f 1) \
-             -d $'\x20' -a 1 -b 1 "$allshas"
-}
+  if [ $# -lt 1 ]; then
+    echo "usage: find_dups <base-dir>" >&2
+    return 1
+  fi
+  local base="$1"; shift
+  local all=$(mktemp /tmp/tmp.XXXXX)
+  local dups=$(mktemp /tmp/tmp.XXXXX)
 
-function suggest_remove {
-  local allshas="$1"; shift
-  local uniqshas="$1"; shift
-  comm -32 "$allshas" "$uniqshas"
-}
+  calculate_shas "$base" > "$all"
+  cat "$all" |
+    awk '{shas[$1] += 1} END{for(s in shas) print s "," shas[s]}' |
+    grep -v ',1$' |
+    cut -d, -f 1 \
+    > "$dups"
 
-function suggest_mergedirs {
-  local allshas="$1"; shift
-  local dupshas="$1"; shift
-  local prevsha=
-  filterkeys -f <(reorder -d $'\x20' -f 1 "$dupshas") \
-             -d $'\x20' -a 1 -b 1 "$allshas" |
-    while read l; do
-      local f=$(echo $l | cutfield -d $'\x20' -f 1);
-      local sha=$(echo $l | reorder -d $'\x20' -f 1);
-      if [ "$sha" != "$prevsha" ]; then
-        prevsha=$sha;
-        echo # newline
-      fi
-      echo -n "'$(dirname "$f")' "
-    done |
-    sort -u
+  fgrep -f "$dups" < "$all"
+
+  rm -f "$all" "$dups"
 }
 
 # vim: set sw=2 sts=2 : #
