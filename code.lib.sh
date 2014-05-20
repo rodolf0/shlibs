@@ -28,3 +28,14 @@ function build {
   echo "Don't know how" >&2
   return 1
 }
+
+
+function hgrep {
+  if [ $# -lt 2 -o ! -f "$1" ]; then
+    echo "usage: hgrep <file> <egrep args>"
+    return 1
+  fi
+  local file="$1"; shift
+  cat "$file" |
+    { read _h; echo "$_h"; egrep "$@"; }
+}
