@@ -40,3 +40,25 @@ function hgrep {
   cat "$file" |
     { read _h; echo "$_h"; egrep "$@"; }
 }
+
+
+# like sort but will preserve header
+function xhsort {
+    local opts=("$@")
+    local files=()
+    local newopts=()
+    for o in "${opts[@]}"; do
+        if [ "${o:0:1}" != '-' ] || [ "${#o}" -eq 1 ]; then
+            files=("${files[@]}" "$o")
+        else
+            newopts=("${newopts[@]}" "$o")
+        fi
+    done
+
+    if [ "${#files[@]}" -eq 0 ] || [ "${#files[@]}" -eq 1 -a "$files" = '-' ]; then
+        read h; echo "$h"; sort "${newopts[@]}"
+    else
+        cat "${files[@]}" |
+            { read h; echo "$h"; sort "${newopts[@]}"; }
+    fi
+}
