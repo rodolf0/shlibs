@@ -18,6 +18,12 @@ function die {
   exit 1
 }
 
+# attach to existing tmux session or create a new one
+function tux {
+  __tmuxsesid=$USER_$(hostname -s)
+  tmux -2 -u new-session -AD -s $__tmuxsesid
+}
+
 # check that only one script executes with a user chosen lock-file
 # if the file exists but the pid is no longer alive the script may run
 # returns 0 on success, 1 on failure
