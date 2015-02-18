@@ -8,6 +8,7 @@ function cgrep {
   local dir="$1"; shift
   find "$dir" \( \
       -iregex '.*\.c\|.*\.cc\|.*\.cpp\|.*\.cxx\|.*\.h\|.*\.hh\|.*\.hpp' -o \
+      -iregex '.*\.ll\|.*\.yy' -o \
       -iname '*.py' -o \
       -iname '*.sh' -o \
       -iregex '.*\.pm\|.*\.pl' -o \
