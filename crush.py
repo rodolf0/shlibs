@@ -100,7 +100,7 @@ def parse_keyspec(keyspec, header, delim):
 def main():
     import argparse
     gp = argparse.ArgumentParser()
-    gp.add_argument("--delim", "-d", default=',')
+    gp.add_argument("--delim", "-d", default=os.getenv("DELIMITER", ","))
     gp.add_argument("--no-header", "-N", action="store_true")
     sp = gp.add_subparsers(dest="command")
 
