@@ -3,7 +3,7 @@
 # search local download dirs for torrent files and push them to blacksmith
 function push_torrents {
   local search_dirs=(~/tmp ~/Downloads ~/Descargas /tmp)
-  local torrent_server=warzone3.com.ar
+  local torrent_server=wz4.noip.me
   local blacksmith_torrent_dir=/data/torrents/autoload
 
   for sdir in ${search_dirs[@]}; do
@@ -17,7 +17,7 @@ function push_torrents {
 # search for subtitles in local dirs and ship them to blacksmith
 function push_subdivx_subtitles {
   local search_dirs=(~/tmp ~/Downloads ~/Descargas /tmp)
-  local torrent_server=warzone3.com.ar
+  local torrent_server=wz4.noip.me
   local tmpdir=$(mktemp -d)
 
   for sdir in ${search_dirs[@]}; do
