@@ -28,4 +28,11 @@ function bitfactory {
   eval echo $bits
 }
 
-# vim: set sw=2 sts=2 : #
+function sumrows {
+  awk '{s=0; for (i=1; i<=NF; i++) s=s+$i; print s}'
+}
+
+function sumcol {
+  local col="$1"
+  awk "BEGIN{s=0} {s+=\$$col} END{print s}"
+}
