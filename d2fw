@@ -1,0 +1,38 @@
+#!/usr/bin/awk -f
+
+BEGIN {
+  # get the field delimiter
+  if (ENVIRON["D"] != "")
+    FS=ENVIRON["D"]
+  else
+    FS=",";
+
+  # sample first lines to adjust field width
+  sampled = 0;
+  while (sampled < 50) {
+    if (getline <= 0)
+      break;
+    for (i=1; i<=NF; i++) {
+      if (length($i) > flen[i])
+        flen[i]=length($i);
+    }
+    line[sampled++]=$0;
+  }
+
+  # output buffered/sampled lines
+  for (l=0; l<sampled; l++) {
+    split(line[l], tmp, FS);
+    for (i=1; i<=NF; i++) {
+      printf "%-*.*s", flen[i]+3, flen[i], tmp[i];
+    }
+    printf "\n";
+  }
+}
+
+# output the rest of the file
+{
+  for (i=1; i<=NF; i++) {
+    printf "%-*.*s", flen[i]+3, flen[i], $i;
+  }
+  printf "\n";
+}

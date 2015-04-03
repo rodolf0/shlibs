@@ -1,0 +1,21 @@
+#!/usr/bin/env python
+
+# read single nested json and output thorn delimited lines
+
+import os
+import sys
+import json
+import codecs
+
+HEADER = None
+D = os.getenv('DELIMITER', u'\xfe')
+out = codecs.getwriter('latin1')(sys.stdout, 'ignore')
+
+def dumper(obj):
+  global HEADER
+  if not HEADER:
+    HEADER = tuple(obj.keys())
+    out.write(D.join(HEADER) + '\n')
+  out.write(D.join(obj[h] or '' for h in HEADER) + '\n')
+
+json.load(sys.stdin, object_hook=dumper)

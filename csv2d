@@ -1,0 +1,100 @@
+#!/usr/bin/env python
+
+import csv
+import getopt
+import os
+import sys
+
+
+def Usage():
+  sys.stderr.write("""
+csv2d: converts CSV data to string-delimited data.
+
+Usage: %s [Options] [file ...]
+
+Options:
+  -h, -?, --help         Print this message and exit.
+  -d, --delimiter <STR>  Separate output fields with STR.
+  -i, --input <FILE>     Read input from FILE (for backwards-compatibility).
+  -o, --output <FILE>    Write output to FILE.
+
+The --input option may be specified multiple times.  Files specified there are
+prepended to the list of files provided as trailing commandline arguments.
+
+""" % sys.argv[0])
+  exit(0)
+
+
+def ConvertToDelimited(filename, output, delimiter):
+  """Converts lines in CSV file F to delimited lines written to OUTPUT.
+
+  Args:
+    filename: (str) Name of the file to be read.
+    output: (File) object to which output should be written.
+    delimiter: (str) Output field separator.
+
+  Raises:
+    IOError: if writing to output fails for some reason other than a
+      broken pipe.
+  """
+  if filename == '-':
+    f = sys.stdin
+  else:
+    f = open(filename)
+  reader = csv.reader(f)
+  for row in reader:
+    try:
+      output.write(delimiter.join(row) + '\n')
+    except IOError, e:
+      if e.errno == 32:  # Broken pipe - quit silently.
+        return
+      else:
+        raise e
+
+
+def ParseCommandline(argv):
+  """Parses the commandline options.
+
+  Args:
+    argv: ([str]) commandline options (minus the binary name)
+
+  Returns:
+    (files, output, delimiter) tuple, where
+      * files is a list of input filenames.
+      * output is a writeable File object.
+      * delimiter is a string.
+  """
+  files = []
+  output = sys.stdout
+  delimiter = os.environ.get('DELIMITER', '\xfe')
+
+  try:
+    optlist, args = getopt.getopt(argv, 'h?d:i:o:',
+                                  ['help', 'delimiter=', 'input=', 'output='])
+  except getopt.GetoptError, e:
+    sys.stderr.write('%s: %s\n' % (sys.argv[0], e.msg))
+    exit(1)
+
+  for option, value in optlist:
+    if option in ['-h', '-?', '--help']:
+      Usage()
+    elif option in ['-i', '--input']:
+      files.append(value)
+    elif option in ['-o', '--output']:
+      output = open(value, 'w')
+    elif option in ['-d', '--delimiter']:
+      delimiter = value
+    else:
+      sys.stderr.write('unhandled option %s' % option)
+
+  files.extend(args)
+  if not files:
+    files = ['-']
+
+  return files, output, delimiter
+
+
+if __name__ == '__main__':
+  files, output, delimiter = ParseCommandline(sys.argv[1:])
+  for f in files:
+    ConvertToDelimited(f, output, delimiter)
