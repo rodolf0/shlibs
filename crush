@@ -92,7 +92,7 @@ def parse_keyspec(keyspec, header, delim):
             idxs.extend(range(start - 1, end))
         else:
             idxs.append(int(spec) - 1)
-    assert all(k >= 0 and k < len(header) for k in idxs)
+    assert all(0 <= k < len(header) for k in idxs)
     return idxs, detected_header
 
 
@@ -145,8 +145,10 @@ def main():
 
 
     args = gp.parse_args()
-    out = None
+    if not args.command:
+        return gp.print_help()
 
+    out = None
     instream = (l.rstrip("\r\n").split(args.delim) for l in args.infile)
     firstline = next(instream)
     instream = itertools.chain([firstline], instream)
