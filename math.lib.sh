@@ -36,3 +36,23 @@ function sumcol {
   local col="$1"
   awk "BEGIN{s=0} {s+=\$$col} END{print s}"
 }
+
+# show the x-th percentile row
+function pX {
+  if [ $# -lt 2 ]; then
+    echo "usage: pX <percentile> <sort-field>"
+    return 1
+  fi
+  local pct="${1:-95}"
+  local field="$2"
+  local tmpbuf=$(mktemp)
+  if [ "$field" ]; then
+    sort -k${field}n,${field}n
+  else
+    sort -n
+  fi > "$tmpbuf"
+  local pctline=$(wc -l "$tmpbuf" | sed 's/ .*$//')
+  pctline=$(echo "($pctline*0.$pct-0.5)/1" | bc)
+  sed -n "${pctline}p" "$tmpbuf"
+  rm -f "$tmpbuf"
+}
