@@ -146,4 +146,13 @@ function pfind {
     fi)
 }
 
+function map {
+  [[ "$1" =~ [0-9]+ ]] && { local atonce="$1"; shift; }
+  if [ $# -ne 1 ]; then
+    echo "usage: $0 [num-parallel] \"<cmd where __ is placeholder>\"" >&2
+    return 1
+  fi
+  xargs -P "${atonce:-4}" -I __ sh -c "$1"
+}
+
 # vim: set sw=2 sts=2 : #
