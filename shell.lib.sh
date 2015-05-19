@@ -147,7 +147,7 @@ function pfind {
 }
 
 function map {
-  [[ "$1" =~ [0-9]+ ]] && { local atonce="$1"; shift; }
+  [[ "$1" =~ ^[0-9]+$ ]] && { local atonce="$1"; shift; }
   if [ $# -ne 1 ]; then
     echo "usage: $0 [num-parallel] \"<cmd where __ is placeholder>\"" >&2
     return 1
