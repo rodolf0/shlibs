@@ -37,6 +37,10 @@ function sumcol {
   awk "BEGIN{s=0} {s+=\$$col} END{print s}"
 }
 
+function freq {
+  sort | uniq -c | sort -n
+}
+
 # show the x-th percentile row
 function pX {
   if [ $# -lt 2 ]; then
