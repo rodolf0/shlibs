@@ -38,7 +38,7 @@ function sumcol {
 }
 
 function freq {
-  sort | uniq -c | sort -n
+  sort | uniq -c | sort -nr
 }
 
 # show the x-th percentile row
