@@ -146,13 +146,16 @@ function pfind {
     fi)
 }
 
-function map {
-  [[ "$1" =~ ^[0-9]+$ ]] && { local atonce="$1"; shift; }
-  if [ $# -ne 1 ]; then
-    echo "usage: $0 [num-parallel] \"<cmd where __ is placeholder>\"" >&2
-    return 1
-  fi
-  xargs -P "${atonce:-4}" -I __ sh -c "$1"
+# quote "$@" args within single quotes
+function __quote {
+  local args=();
+  for x in "$@"; do
+    args+=("$(printf "'%s'" "$x")")
+  done
+  echo "${args[@]}"
 }
 
-# vim: set sw=2 sts=2 : #
+
+function x {
+  xargs --no-run-if-empty --max-procs 10 -I__ sh -c "$(__quote "$@")"
+}
