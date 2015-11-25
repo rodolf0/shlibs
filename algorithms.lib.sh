@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # group items based on a portion of it's name
-function _foreach_cluster {
+function groupby {
   if [ $# -lt 3 ]; then
     echo "usage: $0 <rgx-to-make-key> <callback> item [ item ... ]"
     return 1
@@ -21,17 +21,17 @@ function _foreach_cluster {
   done
 
   for key in ${_keys}; do
-    $callback ${!key}
+    "$callback" ${!key}
   done
 }
 
 
 # cluster a list of files by extension
-function ext_cluster {
+function by_extension {
   if [ $# -lt 2 ]; then
     echo "usage: $0 <callback> file [ file ... ]"
     return 1
   fi
   local callback="$1"; shift
-  _foreach_cluster 's/^\(.*/\)\?[^.]*\.//' "$callback" "$@"
+  groupby 's/^\(.*/\)\?[^.]*\.//' "$callback" "$@"
 }
