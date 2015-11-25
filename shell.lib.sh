@@ -159,3 +159,11 @@ function __quote {
 function x {
   xargs --no-run-if-empty --max-procs 10 -I__ sh -c "$(__quote "$@")"
 }
+
+function puptime {
+  if [ $# -lt 1 ]; then
+    echo "usage: puptime <grep-args>" >&2
+    return 1
+  fi
+  ps -o pid,stime,command -e | { read h; echo $h; grep "${@:-.}"; }
+}
