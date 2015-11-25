@@ -1,0 +1,18 @@
+#!/usr/bin/awk -f
+
+# split input stream to different output files based on field <SPLITF> to directory <OUTDIR>
+
+BEGIN {
+  SPLITF=1
+  if (ARGC > 1 && ARGV[1] ~ /^\d+$/)
+    SPLITF=ARGV[1]
+  OUTDIR="."
+  if (ARGC > 2)
+    OUTDIR=ARGV[2]
+}
+
+# output the file
+{
+  filename=OUTDIR "/" SPLITF ".split";
+  print $0 >> filename;
+}
