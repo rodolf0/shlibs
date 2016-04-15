@@ -131,7 +131,7 @@ def main():
     p.add_argument("--bucket", "-b", default="lambda x: str(abs(hash(x)) % 10)",
                    help="Partition function, eg lambda x, y: x+y")
     p.add_argument("--path", "-p", default=".")
-    p.add_argument("--copy-headers", "-H", action="store_true") # force headers
+    p.add_argument("--headers", "-H", action="store_true") # force headers
     p.add_argument("--outpat", "-o", default="%",
                    help="Output filename pattern, % is the bucket name")
     p.add_argument("infile", type=argparse.FileType('r'),
