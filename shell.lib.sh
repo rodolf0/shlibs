@@ -162,8 +162,12 @@ function x {
 
 function puptime {
   if [ $# -lt 1 ]; then
-    echo "usage: puptime <grep-args>" >&2
+    echo "usage: puptime <pid>" >&2
     return 1
   fi
-  ps -o pid,stime,command -e | { read h; echo $h; grep "${@:-.}"; }
+  ps -o etime= -p "$1" |
+    sed 's/^ *//; s/-/:/; s/:/\n/g' |
+    tac |
+    tr '\n' : |
+    awk -F: '{print ($1 + $2*60 + $3*3600 + $4* 86400)}'
 }
