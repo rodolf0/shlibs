@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-function cgrep {
+cgrep() {
   if [ $# -lt 2 ]; then
     echo "usgage: cgrep <rootdir> <egrep-opts>..." >&2
     return 1
@@ -17,21 +17,7 @@ function cgrep {
     xargs -0 egrep "$@"
 }
 
-
-function build {
-  # try to build Makefile based project
-  local bdir=$(pfind build)
-  if [ "$bdir" -a -f "$bdir/build/Makefile" ]; then
-    make -C "$bdir/build"
-    return
-  fi
-
-  echo "Don't know how" >&2
-  return 1
-}
-
-
-function hgrep {
+hgrep() {
   if [ $# -lt 2 -o ! -f "$1" ]; then
     echo "usage: hgrep <file> <egrep args>"
     return 1
@@ -41,9 +27,8 @@ function hgrep {
     { read _h; echo "$_h"; egrep "$@"; }
 }
 
-
 # like sort but will preserve header
-function xhsort {
+xhsort() {
     local opts=("$@")
     local files=()
     local newopts=()
@@ -54,7 +39,6 @@ function xhsort {
             newopts=("${newopts[@]}" "$o")
         fi
     done
-
     if [ "${#files[@]}" -eq 0 ] || [ "${#files[@]}" -eq 1 -a "$files" = '-' ]; then
         read h; echo "$h"; sort "${newopts[@]}"
     else

@@ -2,23 +2,23 @@
 
 export __MARKPATH=$HOME/.marks
 
-function j {
+j() {
   cd -P $__MARKPATH/$1 2>/dev/null || echo "No such mark: $1"
 }
 
-function mark {
+mark() {
   mkdir -p $__MARKPATH; ln -s $(pwd) $__MARKPATH/$1
 }
 
-function unmark {
+unmark() {
   rm -i $__MARKPATH/$1
 }
 
-function marks {
+marks() {
   ls -l $__MARKPATH | awk '/->/ {printf "%-15s -> %s\n", $9, $11}'
 }
 
-function _jcompgen {
+_jcompgen() {
   local cur=${COMP_WORDS[COMP_CWORD]}
   COMPREPLY=()
   if [ $(ls -1 $__MARKPATH 2>/dev/null | sed "/^$cur/!d" | wc -l) -eq 1 ]; then
@@ -31,5 +31,3 @@ function _jcompgen {
 }
 
 complete -o nospace -F _jcompgen j
-
-# vim: set sw=2 sts=2 : #

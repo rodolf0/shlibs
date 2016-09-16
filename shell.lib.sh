@@ -1,25 +1,25 @@
 #!/bin/bash
 
 # kill a whole process group
-function gkill {
+gkill() {
   [ $# -eq 1 ] &&
   kill -TERM -$(ps -p "$1" -o pgid --no-headers)
 }
 
 # check if a pid is alive
-function pid_alive {
+pid_alive() {
   [ $# -eq 1 ] &&
   ps h -p $1 &> /dev/null
 }
 
 # exit a script with verbose output to stder
-function die {
+die() {
   echo "$0: $@" >&2
   exit 1
 }
 
 # attach to existing tmux session or create a new one
-function tux {
+tux() {
   __tmuxsesid=$USER_$(hostname -s)
   tmux -2 -u new-session -AD -s $__tmuxsesid
 }
@@ -27,7 +27,7 @@ function tux {
 # check that only one script executes with a user chosen lock-file
 # if the file exists but the pid is no longer alive the script may run
 # returns 0 on success, 1 on failure
-function assert_single_instance {
+assert_single_instance() {
   if [ $# -lt 1 ]; then
     echo "Usage: assert_single_instance <lock-file> [remove-stale]"
     return 1
@@ -56,7 +56,7 @@ function assert_single_instance {
 }
 
 # print something in color (first arg indicates color)
-function cprint {
+cprint() {
   if [ $# -lt 2 ]; then
     echo "usage: cprint <color> text..." >&2
     return 1
@@ -81,7 +81,7 @@ function cprint {
 }
 
 # highlight some regex within stdout
-function highlight {
+highlight() {
   local sede=()
   local i=1
   while [ "$1" ]; do
@@ -94,7 +94,7 @@ function highlight {
 }
 
 # print most frequently used n commands
-function topcmd {
+topcmd() {
   local count="${1:-20}"; shift
   history |
     awk '{ freq[$2]++ } END { for (cmd in freq) print freq[cmd] ":" cmd }' |
@@ -104,7 +104,7 @@ function topcmd {
 }
 
 # clone stdout to a file
-function logoutput {
+logoutput() {
   if [ $# -lt 1 ]; then
     echo "usage: logoutput <logfile>" >&2
     return 1
@@ -117,7 +117,7 @@ function logoutput {
   local teepid=$!
   exec > "$fifo"
 
-  function _stop_logging {
+  _stop_logging() {
     exec >&64 64>&-
     wait $teepid
     unset _stop_logging
@@ -126,7 +126,7 @@ function logoutput {
 }
 
 # find file in current directory or parents recursively
-function pfind {
+pfind() {
   local sdir=.
   local fname=
   if [ $# -eq 1 ]; then
@@ -147,7 +147,7 @@ function pfind {
 }
 
 # quote "$@" args within single quotes
-function __quote {
+__quote() {
   local args=();
   for x in "$@"; do
     args+=("$(printf "'%s'" "$x")")
@@ -155,12 +155,11 @@ function __quote {
   echo "${args[@]}"
 }
 
-
-function x {
+x() {
   xargs --no-run-if-empty --max-procs 10 -I__ sh -c "$(__quote "$@")"
 }
 
-function puptime {
+puptime() {
   if [ $# -lt 1 ]; then
     echo "usage: puptime <pid>" >&2
     return 1
