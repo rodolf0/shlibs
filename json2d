@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-# read single nested json and output thorn delimited lines
-
 import os
 import sys
 import json
