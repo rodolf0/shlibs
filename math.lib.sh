@@ -47,7 +47,6 @@ pX() {
 }
 
 stats() {
-  [ "$1" = -h ] && echo "count avg min p1 p2 p5 p25 p50 p90 p95 p99 max"
   sort -n |
     awk 'BEGIN{ i=0; t=0; }
     NR == 1 {min=$1; max=$1}
@@ -65,5 +64,11 @@ stats() {
       s[int(NR*0.95-0.5)],
       s[int(NR*0.99-0.5)],
       max
-    }' 2>/dev/null
+    }' 2>/dev/null |
+    if [ "$1" = -h ]; then
+      { echo "count avg min p1 p2 p5 p25 p50 p90 p95 p99 max"; cat -; } |
+      column -t
+    else
+      cat -
+    fi
 }
