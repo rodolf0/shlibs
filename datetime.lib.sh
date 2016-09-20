@@ -43,12 +43,15 @@ mpk() {
   echo "** London"
   echo "   mpk  -> [$(tz_calc US/Pacific "$tm" Europe/London)]"
   echo "   nyc  -> [$(tz_calc America/New_York "$tm" Europe/London)]"
+  echo "   arg  -> [$(tz_calc America/Buenos_Aires "$tm" Europe/London)]"
   echo
   echo "** MPK"
   echo "   london -> [$(tz_calc Europe/London "$tm" US/Pacific)]"
   echo "   nyc    -> [$(tz_calc America/New_York "$tm" US/Pacific)]"
+  echo "   arg    -> [$(tz_calc America/Buenos_Aires "$tm" US/Pacific)]"
   echo
   echo "** NYC"
   echo "   london -> [$(tz_calc Europe/London "$tm" America/New_York)]"
   echo "   mpk    -> [$(tz_calc US/Pacific "$tm" America/New_York)]"
+  echo "   arg    -> [$(tz_calc America/Buenos_Aires "$tm" America/New_York)]"
 }
