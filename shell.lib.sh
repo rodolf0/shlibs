@@ -20,8 +20,8 @@ die() {
 
 # attach to existing tmux session or create a new one
 tux() {
-  __tmuxsesid=$USER_$(hostname -s)
-  tmux -2 -u new-session -AD -s $__tmuxsesid
+  local __tmuxsesid="$USER_$(hostname -s)"
+  tmux -2 -u "$@" new-session -AD -s "$__tmuxsesid"
 }
 
 # check that only one script executes with a user chosen lock-file
