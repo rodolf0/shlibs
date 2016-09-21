@@ -36,7 +36,7 @@ tbetween() {
   [ $(date -d "$strt" +%s) -le $s -a $(date -d "$endt" +%s) -gt $s ]
 }
 
-mpk() {
+tz() {
   local tm="${1:-now}"
   echo "raw time --- $(date -d "$tm" "+%F %T")"
   echo
