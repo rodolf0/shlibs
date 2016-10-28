@@ -81,7 +81,7 @@ cprint() {
 }
 
 # highlight some regex within stdout
-highlight() {
+hl() {
   local sede=()
   local i=1
   while [ "$1" ]; do
@@ -91,6 +91,18 @@ highlight() {
     ((i++))
   done
   eval sed "${sede[@]}"
+}
+
+hlnum() {
+  C() { printf '\e[1;31m%s\e[0m' "$1"; }
+  local xn='\([0-9]\{3\}\)'
+  sed -e "s!\([0-9]\{1,3\}\)${xn}\>!$(C \\1)\2!g" \
+      -e "s!\([0-9]\{1,3\}\)${xn}\>!$(C \\1)\2!g" \
+      -e "s!\([0-9]\{1,3\}\)${xn}\>!$(C \\1)\2!g"
+}
+
+thousands() {
+  sed ':a;s!\B[0-9]\{3\}\>!,&!; ta'
 }
 
 # print most frequently used n commands
