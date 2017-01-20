@@ -101,6 +101,15 @@ hn() {
       -e "s!\([0-9]\{1,3\}\)${xn}\>!$(C \\1)\2!g"
 }
 
+# history search
+hs() {
+  local filter=
+  for f in "$@"; do
+    filter="$filter | grep '$f'"
+  done
+  eval history "$filter"
+}
+
 thousands() {
   sed ':a;s!\B[0-9]\{3\}\>!,&!; ta'
 }
