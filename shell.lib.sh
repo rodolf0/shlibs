@@ -102,7 +102,7 @@ hn() {
 }
 
 # history search
-hs() {
+hist() {
   local filter=
   for f in "$@"; do
     filter="$filter | grep '$f'"
