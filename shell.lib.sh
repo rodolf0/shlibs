@@ -93,14 +93,6 @@ hl() {
   eval sed "${sede[@]}"
 }
 
-hn() {
-  C() { printf '\e[1;m%s\e[0m' "$1"; }
-  local xn='\([0-9]\{3\}\)'
-  sed -e "s!\([0-9]\{1,3\}\)${xn}\>!$(C \\1)\2!g" \
-      -e "s!\([0-9]\{1,3\}\)${xn}\>!$(C \\1)\2!g" \
-      -e "s!\([0-9]\{1,3\}\)${xn}\>!$(C \\1)\2!g"
-}
-
 # history search
 hist() {
   local filter=
