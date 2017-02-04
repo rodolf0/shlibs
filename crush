@@ -59,6 +59,73 @@ def calcfields(instream, calcspec, show_header):
         yield line
 
 
+class PercentileAgg(object):
+    __slots__ = ["aggr", "column", "percentile"]
+
+    def __init__(self, column, p):
+        self.aggr = []
+        self.column = column
+        self.percentile = p
+
+    def __call__(self, line):
+        self.aggr.append(float(line[self.column]))
+
+    def __str__(self):
+        self.aggr.sort()
+        idx = int(len(self.aggr) * self.percentile / 100.0)
+        return "%g" % self.aggr[idx]
+
+
+class AdderAgg(object):
+    __slots__ = ["aggr", "column"]
+
+    def __init__(self, column):
+        self.column = column
+        self.aggr = 0.0
+
+    def __call__(self, line):
+        self.aggr += float(line[self.column])
+
+    def __str__(self):
+        return "%g" % self.aggr
+
+
+class CounterAgg(object):
+    __slots__ = ["aggr"]
+
+    def __init__(self):
+        self.aggr = 0
+
+    def __call__(self, line):
+        self.aggr += 1
+
+    def __str__(self):
+        return "%g" % self.aggr
+
+
+def aggregate(instream, keys, pivots, show_header, aggregator):
+    "Aggregate values by keys, optionally break down by pivots"
+    header = next(instream) if show_header else None
+    aggs, all_keys, all_pivs = {}, set(), set()
+    for inline in instream:
+        key = tuple(inline[f] for f in keys)
+        piv = tuple(inline[f] for f in pivots)
+        all_keys.add(key)
+        all_pivs.add(piv)
+        agg = aggs.setdefault(key, {})
+        agg = agg.setdefault(piv, aggregator())
+        agg(inline)
+    all_keys, all_pivs = sorted(all_keys), sorted(all_pivs)
+    if show_header:
+        yield tuple(header[k] for k in keys) + \
+            tuple("+".join("%s=%s" % (header[p], pv[i])
+                           for i, p in enumerate(pivots))
+                  for pv in all_pivs)
+    # yield rows
+    for k in all_keys:
+        yield k + tuple(str(aggs.get(k, {}).get(p, 0)) for p in all_pivs)
+
+
 # TODO column writer
 # output writers
 def stream_writer(instream, odelim, outstream):
@@ -125,7 +192,7 @@ def main():
                     help="first line is data")
     sp = gp.add_subparsers(dest="command")
 
-    p = sp.add_parser("reorder")
+    p = sp.add_parser("cut")
     p.add_argument("--fields", "-f", required=True)
     p.add_argument("infile", type=argparse.FileType('r'),
                    nargs="?", default=sys.stdin)
@@ -164,18 +231,18 @@ def main():
     p.add_argument("infile", type=argparse.FileType('r'),
                    nargs="?", default=sys.stdin)
 
-    p = sp.add_parser("aggregate")
+    p = sp.add_parser("aggr")
     p.add_argument("--headers", "-H")
-    gp.add_argument("--sdelim", default="|",
-                    help="output field sub-delimiter")
+    p.add_argument("--sdelim", default="|",
+                   help="output field sub-delimiter")
     p.add_argument("--keys", "-k")
     p.add_argument("--pivots", "-p")
-    p.add_argument("--count")
-    p.add_argument("--sum")
     p.add_argument("infile", type=argparse.FileType('r'),
                    nargs="?", default=sys.stdin)
-
-    # -k '%1[3:]' --count
+    aggp = p.add_mutually_exclusive_group()
+    aggp.add_argument("--count", action="store_true")
+    aggp.add_argument("--pct", nargs=2, help="--pct <pct> <column>")
+    aggp.add_argument("--sum")
 
     args = gp.parse_args()
     if not args.command:
@@ -190,7 +257,7 @@ def main():
     # a. has no input-header (or treated as data -N) -> no output-header
     # b. has input-header -> we always print it (filter out some other way)
 
-    if args.command == "reorder":
+    if args.command == "cut":
         fields, _ = parse_keyspec(args.fields, firstline)
         out = reorder(instream, fields)
 
@@ -245,8 +312,24 @@ def main():
         calcspec = zip(calcfuncs, exprheaders)
         out = calcfields(instream, calcspec, show_header)
 
-    elif args.command == "aggregate":
-        pass
+    elif args.command == "aggr":
+        keys, pivots = [], []
+        if args.keys:
+            keys, detecth_keys = parse_keyspec(args.keys, firstline)
+        if args.pivots:
+            pivots, detecth_pivs = parse_keyspec(args.pivots, firstline)
+        agg = CounterAgg
+        if args.pct:
+            column, detecth_agg = parse_keyspec(args.pct[1], firstline)
+            agg = lambda: PercentileAgg(column[0], float(args.pct[0]))
+        elif args.sum:
+            columns, detecth_agg = parse_keyspec(args.sum, firstline)
+            agg = lambda: AdderAgg(columns[0])
+        detected_header = (detecth_keys or detecth_pivs or detecth_agg)
+
+        show_header = not args.no_header and detected_header
+        out = aggregate(instream, keys, pivots, show_header, agg)
+
     elif args.command == "uniq":
         pass
     elif args.command == "merge":
