@@ -126,10 +126,22 @@ def aggregate(instream, keys, pivots, show_header, aggregator):
         yield k + tuple(str(aggs.get(k, {}).get(p, 0)) for p in all_pivs)
 
 
-# TODO column writer
-# output writers
+################# output writers #################
 def stream_writer(instream, odelim, outstream):
     outstream.writelines(odelim.join(l) + "\n" for l in instream)
+
+
+def column_writer(instream, odelim, outstream, norm_buffer=15):
+    # inspect first lines to estimate column widths
+    normlines = list(itertools.islice(instream, norm_buffer))
+    widths = [len(col) for col in normlines[0]] if len(normlines) > 0 else []
+    for line in normlines:
+        for colidx, value in enumerate(line):
+            widths[colidx] = max(widths[colidx], len(value))
+    # format output in columns with learnt widths
+    instream = itertools.chain(normlines, instream)
+    outfmt = odelim.join("{:<%d}" % w for w in widths) + "\n"
+    outstream.writelines(outfmt.format(*l) for l in instream)
 
 
 def split_writer(instream, odelim, fieldspec, header, bucket, outpath, outpat):
@@ -186,8 +198,10 @@ def main():
     gp = argparse.ArgumentParser()
     gp.add_argument("--delim", "-d", default=re.compile(r"\s+"),
                     help="regex to split input fields")
-    gp.add_argument("--odelim", "-o", default="\t",  # TODO: default=column
+    gp.add_argument("--odelim", "-o", default="\t",
                     help="output field delimiter")
+    gp.add_argument("--no-col-normalize", "-C", action="store_true",
+                    help="don't normalize output column width")
     gp.add_argument("--no-header", "-N", action="store_true",
                     help="first line is data")
     sp = gp.add_subparsers(dest="command")
@@ -339,7 +353,10 @@ def main():
     elif args.command == "convdate":
         pass
 
-    stream_writer(out, args.odelim, sys.stdout)
+    if args.no_col_normalize:
+        stream_writer(out, args.odelim, sys.stdout)
+    else:
+        column_writer(out, args.odelim, sys.stdout)
 
 
 if __name__ == "__main__":
