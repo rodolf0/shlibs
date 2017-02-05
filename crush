@@ -7,6 +7,7 @@ import itertools
 import os
 import re
 import sys
+import math  # imported to be used by eval
 
 
 def reorder(instream, fields):
@@ -46,17 +47,20 @@ def grepfield(instream, grepspec, show_header, anyfield, icase, invert):
                 yield line
 
 
-def calcfields(instream, calcspec, show_header):
+def calcfields(instream, calcspec, show_header, filter_rows):
     "Calculate new columns using python, calcspec: [(expr, header)...]"
     calcspec = list(calcspec)
     if show_header:
         line = next(instream)
-        line.extend(header for _, header in calcspec)
+        if not filter_rows:
+            line.extend(header for _, header in calcspec)
         yield line
     for line in instream:
-        line.extend(str(fn(*[line[i] for i in args]))
-                    for (fn, args), _ in calcspec)
-        yield line
+        exprs = [fn(*[line[i] for i in args]) for (fn, args), _ in calcspec]
+        if not filter_rows:
+            yield line + [str(x) for x in exprs]
+        elif filter_rows and all(exprs):
+            yield line
 
 
 def PercentileAgg(pct, col):
@@ -177,7 +181,7 @@ def stream_writer(instream, odelim, outstream):
     outstream.writelines(odelim.join(l) + "\n" for l in instream)
 
 
-def column_writer(instream, odelim, outstream, norm_buffer=15):
+def column_writer(instream, odelim, outstream, norm_buffer=128):
     # inspect first lines to estimate column widths
     normlines = list(itertools.islice(instream, norm_buffer))
     widths = [len(col) for col in normlines[0]] if len(normlines) > 0 else []
@@ -248,6 +252,7 @@ def main():
                     help="output field delimiter")
     gp.add_argument("--no-col-normalize", "-C", action="store_true",
                     help="don't normalize output column width")
+    gp.add_argument("--skip", type=int, help="skip first n lines")
     gp.add_argument("--no-header", "-N", action="store_true",
                     help="first line is data")
     sp = gp.add_subparsers(dest="command")
@@ -287,6 +292,8 @@ def main():
 
     p = sp.add_parser("calc")
     p.add_argument("--headers", "-H")
+    p.add_argument("--filter", "-f", action="store_true",
+                   help="only keep rows matching expressions")
     p.add_argument("exprs", nargs="+")
     p.add_argument("infile", type=argparse.FileType('r'),
                    nargs="?", default=sys.stdin)
@@ -310,6 +317,8 @@ def main():
 
     out = None
     instream = (args.delim.split(l.rstrip("\r\n")) for l in args.infile)
+    if args.skip:
+        instream = itertools.islice(instream, args.skip, None)
     firstline = next(instream)
     instream = itertools.chain([firstline], instream)
 
@@ -350,7 +359,6 @@ def main():
     elif args.command == "calc":
         argre = re.compile(r"({[^}]+})")
         calcfuncs, detected_header = [], False
-        assert args.headers is None or len(args.headers) == len(args.exprs)
         # for each expression we need to build a lambda that calculates it
         for expr in args.exprs:
             # find all references to fields within the expression
@@ -369,8 +377,9 @@ def main():
             calcfuncs.append((expr, fieldspec))
         show_header = not args.no_header and (detected_header or args.headers)
         exprheaders = args.headers.split(",") if args.headers else args.exprs
+        assert args.headers is None or len(exprheaders) == len(args.exprs)
         calcspec = zip(calcfuncs, exprheaders)
-        out = calcfields(instream, calcspec, show_header)
+        out = calcfields(instream, calcspec, show_header, args.filter)
 
     elif args.command == "aggr":
         keys, pivots, aggregators = [], [], []
@@ -405,4 +414,7 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except BrokenPipeError:
+        pass
