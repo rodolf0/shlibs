@@ -10,6 +10,7 @@ import math  # imported to be used by eval
 import os
 import re
 import sys
+import csv
 
 
 def reorder(instream, fields):
@@ -376,6 +377,8 @@ def main():
     gp.add_argument("--no-col-normalize", "-C", action="store_true",
                     help="don't normalize output column width")
     gp.add_argument("--skip", type=int, help="skip first n lines")
+    gp.add_argument("--csv", action="store_true",
+                    help="use CSV reader instead of regex split")
     gp.add_argument("--no-header", "-N", action="store_true",
                     help="first line is data")
     sp = gp.add_subparsers(dest="command")
@@ -438,12 +441,13 @@ def main():
     if not args.command:
         return gp.print_help()
 
-    instream = args.infile
-    if len(args.delim) == 1:
-        instream = (l.rstrip("\r\n").split(args.delim) for l in instream)
+    if args.csv:
+        instream = csv.reader(args.infile)
+    elif len(args.delim) == 1:
+        instream = (l.rstrip("\r\n").split(args.delim) for l in args.infile)
     else:
         delim = re.compile(args.delim)
-        instream = (delim.split(l.rstrip("\r\n")) for l in instream)
+        instream = (delim.split(l.rstrip("\r\n")) for l in args.infile)
     if args.skip:
         instream = itertools.islice(instream, args.skip, None)
     firstline = next(instream)
