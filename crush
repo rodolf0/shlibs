@@ -59,35 +59,47 @@ def calcfields(instream, calcspec, show_header):
         yield line
 
 
-class PercentileAgg(object):
-    __slots__ = ["aggr", "column", "percentile"]
+def PercentileAgg(pct, col):
+    class Aggregator(object):
+        __slots__ = ["aggr"]
+        percentile = pct
+        column = col
 
-    def __init__(self, column, p):
-        self.aggr = []
-        self.column = column
-        self.percentile = p
+        def __init__(self):
+            self.aggr = []
 
-    def __call__(self, line):
-        self.aggr.append(float(line[self.column]))
+        def __call__(self, line):
+            self.aggr.append(float(line[self.column]))
 
-    def __str__(self):
-        self.aggr.sort()
-        idx = int(len(self.aggr) * self.percentile / 100.0)
-        return "%g" % self.aggr[idx]
+        def __str__(self):
+            self.aggr.sort()
+            idx = int(len(self.aggr) * self.percentile / 100.0)
+            return "%.12g" % self.aggr[idx]
+
+        @classmethod
+        def header(cls, header):
+            return "p%g-%s" % (cls.percentile, header[cls.column])
+    return Aggregator
 
 
-class AdderAgg(object):
-    __slots__ = ["aggr", "column"]
+def AdderAgg(col):
+    class Aggregator(object):
+        __slots__ = ["aggr"]
+        column = col
 
-    def __init__(self, column):
-        self.column = column
-        self.aggr = 0.0
+        def __init__(self):
+            self.aggr = 0.0
 
-    def __call__(self, line):
-        self.aggr += float(line[self.column])
+        def __call__(self, line):
+            self.aggr += float(line[self.column])
 
-    def __str__(self):
-        return "%g" % self.aggr
+        def __str__(self):
+            return "%.12g" % self.aggr
+
+        @classmethod
+        def header(cls, header):
+            return "Sum-%s" % header[cls.column]
+    return Aggregator
 
 
 class CounterAgg(object):
@@ -102,8 +114,12 @@ class CounterAgg(object):
     def __str__(self):
         return "%g" % self.aggr
 
+    @classmethod
+    def header(cls, header):
+        return "Count"
 
-def aggregate(instream, keys, pivots, show_header, aggregator):
+
+def aggregate(instream, keys, pivots, show_header, aggregators):
     "Aggregate values by keys, optionally break down by pivots"
     header = next(instream) if show_header else None
     aggs, all_keys, all_pivs = {}, set(), set()
@@ -113,20 +129,26 @@ def aggregate(instream, keys, pivots, show_header, aggregator):
         all_keys.add(key)
         all_pivs.add(piv)
         agg = aggs.setdefault(key, {})
-        agg = agg.setdefault(piv, aggregator())
-        agg(inline)
+        # initialize a list of aggregators for each new key/pivot
+        agg = agg.setdefault(piv, tuple(a() for a in aggregators))
+        for aggregator in agg:
+            aggregator(inline)  # aggregate line
+
     all_keys, all_pivs = sorted(all_keys), sorted(all_pivs)
+    # pivot columns: combination of all observed values for all pivots
+    pivcolumns = tuple("+".join("%s=%s" % (header[p], pv[i])
+                                for i, p in enumerate(pivots))
+                       for pv in all_pivs)
     if show_header:
         yield tuple(header[k] for k in keys) + \
-            tuple("+".join("%s=%s" % (header[p], pv[i])
-                           for i, p in enumerate(pivots))
-                  for pv in all_pivs)
-    # yield rows
+            tuple("%s:%s" % (pivcol, a.header(header))
+                  for pivcol in pivcolumns for a in aggregators)
+    emptyaggs = ['-'] * len(aggregators)
     for k in all_keys:
-        yield k + tuple(str(aggs.get(k, {}).get(p, 0)) for p in all_pivs)
+        yield k + tuple(str(a) for p in all_pivs
+                        for a in aggs.get(k, {}).get(p, emptyaggs))
 
 
-################# output writers #################
 def stream_writer(instream, odelim, outstream):
     outstream.writelines(odelim.join(l) + "\n" for l in instream)
 
@@ -253,10 +275,9 @@ def main():
     p.add_argument("--pivots", "-p")
     p.add_argument("infile", type=argparse.FileType('r'),
                    nargs="?", default=sys.stdin)
-    aggp = p.add_mutually_exclusive_group()
-    aggp.add_argument("--count", action="store_true")
-    aggp.add_argument("--pct", nargs=2, help="--pct <pct> <column>")
-    aggp.add_argument("--sum")
+    p.add_argument("--count", action="store_true")
+    p.add_argument("--p99")
+    p.add_argument("--sum")
 
     args = gp.parse_args()
     if not args.command:
@@ -327,22 +348,26 @@ def main():
         out = calcfields(instream, calcspec, show_header)
 
     elif args.command == "aggr":
-        keys, pivots = [], []
+        keys, pivots, aggregators = [], [], []
+        detected_header = False
         if args.keys:
-            keys, detecth_keys = parse_keyspec(args.keys, firstline)
+            keys, detectedh_agg = parse_keyspec(args.keys, firstline)
+            detected_header |= detectedh_agg
         if args.pivots:
-            pivots, detecth_pivs = parse_keyspec(args.pivots, firstline)
-        agg = CounterAgg
-        if args.pct:
-            column, detecth_agg = parse_keyspec(args.pct[1], firstline)
-            agg = lambda: PercentileAgg(column[0], float(args.pct[0]))
-        elif args.sum:
-            columns, detecth_agg = parse_keyspec(args.sum, firstline)
-            agg = lambda: AdderAgg(columns[0])
-        detected_header = (detecth_keys or detecth_pivs or detecth_agg)
-
+            pivots, detectedh_agg = parse_keyspec(args.pivots, firstline)
+            detected_header |= detectedh_agg
+        if args.count:
+            aggregators.append(CounterAgg)
+        if args.p99:
+            columns, detectedh_agg = parse_keyspec(args.p99, firstline)
+            aggregators.extend(PercentileAgg(99.0, c) for c in columns)
+            detected_header |= detectedh_agg
+        if args.sum:
+            columns, detectedh_agg = parse_keyspec(args.sum, firstline)
+            aggregators.extend(AdderAgg(c) for c in columns)
+            detected_header |= detectedh_agg
         show_header = not args.no_header and detected_header
-        out = aggregate(instream, keys, pivots, show_header, agg)
+        out = aggregate(instream, keys, pivots, show_header, aggregators)
 
     elif args.command == "uniq":
         pass
