@@ -102,6 +102,30 @@ def AdderAgg(col):
     return Aggregator
 
 
+def AvgAgg(col):
+    class Aggregator(object):
+        __slots__ = ["sum", "count"]
+        column = col
+
+        def __init__(self):
+            self.sum = 0.0
+            self.count = 0.0
+
+        def __call__(self, line):
+            self.sum += float(line[self.column])
+            self.count += 1
+
+        def __str__(self):
+            if self.count == 0:
+                return "0"
+            return "%.12g" % (self.sum/self.count)
+
+        @classmethod
+        def header(cls, header):
+            return "Avg-%s" % header[cls.column]
+    return Aggregator
+
+
 class CounterAgg(object):
     __slots__ = ["aggr"]
 
@@ -278,6 +302,7 @@ def main():
     p.add_argument("--count", action="store_true")
     p.add_argument("--p99")
     p.add_argument("--sum")
+    p.add_argument("--avg")
 
     args = gp.parse_args()
     if not args.command:
@@ -366,17 +391,12 @@ def main():
             columns, detectedh_agg = parse_keyspec(args.sum, firstline)
             aggregators.extend(AdderAgg(c) for c in columns)
             detected_header |= detectedh_agg
+        if args.avg:
+            columns, detectedh_agg = parse_keyspec(args.avg, firstline)
+            aggregators.extend(AvgAgg(c) for c in columns)
+            detected_header |= detectedh_agg
         show_header = not args.no_header and detected_header
         out = aggregate(instream, keys, pivots, show_header, aggregators)
-
-    elif args.command == "uniq":
-        pass
-    elif args.command == "merge":
-        pass
-    elif args.command == "sample":
-        pass
-    elif args.command == "convdate":
-        pass
 
     if args.no_col_normalize:
         stream_writer(out, args.odelim, sys.stdout)
