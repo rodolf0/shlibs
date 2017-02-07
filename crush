@@ -19,10 +19,10 @@ def reorder(instream, fields):
         yield list(inline[f] for f in fields)
 
 
-def add_field(instream, addspecs, show_header):
+def add_field(instream, addspecs, has_header):
     "Add fields to stream, addspec: [(insert-idx, value, header)...]"
     addspecs = list(addspecs)
-    if show_header:
+    if has_header:
         line = next(instream)
         for idx, _, hdr in addspecs:
             line.insert(idx, hdr)
@@ -33,11 +33,11 @@ def add_field(instream, addspecs, show_header):
         yield line
 
 
-def grepfield(instream, grepspec, show_header, anyfield, icase, invert):
+def grepfield(instream, grepspec, has_header, anyfield, icase, invert):
     "Filter stream by fields matching regex, grepspec: [(field, pattern)...]"
     flags = re.I if icase else 0
     regexes = tuple((idx, re.compile(pat, flags)) for idx, pat in grepspec)
-    if show_header:
+    if has_header:
         yield next(instream)
     fn = any if anyfield else all
     if invert:
@@ -50,10 +50,10 @@ def grepfield(instream, grepspec, show_header, anyfield, icase, invert):
                 yield line
 
 
-def calcfields(instream, calcspec, show_header, filter_rows):
+def calcfields(instream, calcspec, has_header, filter_rows):
     "Calculate new columns using python, calcspec: [(expr, header)...]"
     calcspec = list(calcspec)
-    if show_header:
+    if has_header:
         line = next(instream)
         if not filter_rows:
             line.extend(header for _, header in calcspec)
@@ -271,10 +271,10 @@ class CounterAgg(object):
         return "Count"
 
 
-def aggregate(instream, keys, pivots, show_header, aggregators):
+def aggregate(instream, keys, pivots, has_header, aggregators):
     "Aggregate values by keys, optionally break down by pivots"
     header = ["col%d" % i for i in range(1, 50)]  # default header
-    if show_header:
+    if has_header:
         header = next(instream)
     aggs, all_keys, all_pivs = {}, set(), set()
     for inline in instream:
@@ -290,7 +290,7 @@ def aggregate(instream, keys, pivots, show_header, aggregators):
 
     all_keys, all_pivs = sorted(all_keys), sorted(all_pivs)
     # pivot columns: combination of all observed values for all pivots
-    if show_header or len(pivots) > 0 or len(aggregators) > 0:
+    if has_header or len(pivots) > 0 or len(aggregators) > 0:
         pivcolumns = tuple("+".join("%s=%s" % (header[p], pv[i])
                                     for i, p in enumerate(pivots))
                            for pv in all_pivs)
@@ -456,7 +456,7 @@ def main():
     instream = itertools.chain([firstline], instream)
     out = None
 
-    # Headers
+    # Headers are always printed if found or can be produced
     # a. has no input-header (or treated as data -N) -> no output-header
     # b. has input-header -> we always print it (filter out some other way)
 
@@ -466,25 +466,25 @@ def main():
 
     elif args.command == "addfield":
         fields, detected_header = parse_keyspec(args.idxs, firstline)
-        show_header = not args.no_header and (detected_header or args.headers)
+        has_header = not args.no_header and (detected_header or args.headers)
         assert args.headers is None or len(args.headers) == len(args.values)
         newheaders = args.headers if args.headers else args.values
         addspec = zip(fields, args.values.split(","), newheaders.split(","))
-        out = add_field(instream, addspec, show_header)
+        out = add_field(instream, addspec, has_header)
 
     elif args.command == "grep":
         fields, detected_header = parse_keyspec(args.fields, firstline)
-        show_header = not args.no_header and detected_header
+        has_header = not args.no_header and detected_header
         assert len(fields) == len(args.patterns)
         grepspec = zip(fields, args.patterns)
-        out = grepfield(instream, grepspec, show_header,
+        out = grepfield(instream, grepspec, has_header,
                         args.anyfield, args.icase, args.invert)
 
     elif args.command == "split":
         fields, detected_header = parse_keyspec(args.fields, firstline)
-        show_header = not args.no_header and detected_header
+        has_header = not args.no_header and detected_header
         # discard header from input stream and replicate it on each output file
-        header = next(instream) if show_header else None
+        header = next(instream) if has_header else None
         bucketfn = eval(args.bucket)
         split_writer(instream, args.odelim, fields, header,
                      bucketfn, args.path, args.outpat)
@@ -509,11 +509,11 @@ def main():
             # evaluate text into a function object
             expr = eval("lambda %s: %s" % (", ".join(varnames), expr))
             calcfuncs.append((expr, fieldspec))
-        show_header = not args.no_header and (detected_header or args.headers)
+        has_header = not args.no_header and (detected_header or args.headers)
         exprheaders = args.headers.split(",") if args.headers else args.exprs
         assert args.headers is None or len(exprheaders) == len(args.exprs)
         calcspec = zip(calcfuncs, exprheaders)
-        out = calcfields(instream, calcspec, show_header, args.filter)
+        out = calcfields(instream, calcspec, has_header, args.filter)
 
     elif args.command == "aggr":
         keys, pivots, aggregators = [], [], []
@@ -562,8 +562,8 @@ def main():
             columns, detectedh_agg = parse_keyspec(args.var, firstline)
             aggregators.extend(VarAgg(c) for c in columns)
             detected_header |= detectedh_agg
-        show_header = not args.no_header and detected_header
-        out = aggregate(instream, keys, pivots, show_header, aggregators)
+        has_header = not args.no_header and detected_header
+        out = aggregate(instream, keys, pivots, has_header, aggregators)
 
     if args.no_col_normalize:
         stream_writer(out, args.odelim, sys.stdout)
