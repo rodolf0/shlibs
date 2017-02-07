@@ -66,27 +66,29 @@ def calcfields(instream, calcspec, has_header, filter_rows):
             yield line
 
 
-def PercentileAgg(pct, col):
-    class Aggregator(object):
-        __slots__ = ["aggr"]
-        percentile = pct
-        column = col
+def PercentileAgg(pct):
+    def PercentileXAgg(col):
+        class Aggregator(object):
+            __slots__ = ["aggr"]
+            percentile = pct
+            column = col
 
-        def __init__(self):
-            self.aggr = []
+            def __init__(self):
+                self.aggr = []
 
-        def __call__(self, line):
-            self.aggr.append(float(line[self.column]))
+            def __call__(self, line):
+                self.aggr.append(float(line[self.column]))
 
-        def __str__(self):
-            self.aggr.sort()
-            idx = int(len(self.aggr) * self.percentile / 100.0)
-            return "%.12g" % self.aggr[idx]
+            def __str__(self):
+                self.aggr.sort()
+                idx = int(len(self.aggr) * self.percentile / 100.0)
+                return "%.12g" % self.aggr[idx]
 
-        @classmethod
-        def header(cls, header):
-            return "p%g-%s" % (cls.percentile, header[cls.column])
-    return Aggregator
+            @classmethod
+            def header(cls, header):
+                return "p%g-%s" % (cls.percentile, header[cls.column])
+        return Aggregator
+    return PercentileXAgg
 
 
 def DistinctAgg(col):
@@ -109,29 +111,31 @@ def DistinctAgg(col):
     return Aggregator
 
 
-def MinMaxAgg(minmax, col):
-    class Aggregator(object):
-        __slots__ = ["aggr"]
-        column = col
+def MinMaxAgg(minmax):
+    def MinMaxAggX(col):
+        class Aggregator(object):
+            __slots__ = ["aggr"]
+            column = col
 
-        def __init__(self):
-            self.aggr = None
+            def __init__(self):
+                self.aggr = None
 
-        def __call__(self, line):
-            if self.aggr is None:
-                self.aggr = float(line[self.column])
-            else:
-                self.aggr = minmax(self.aggr, float(line[self.column]))
+            def __call__(self, line):
+                if self.aggr is None:
+                    self.aggr = float(line[self.column])
+                else:
+                    self.aggr = minmax(self.aggr, float(line[self.column]))
 
-        def __str__(self):
-            return "%.12g" % self.aggr
+            def __str__(self):
+                return "%.12g" % self.aggr
 
-        @classmethod
-        def header(cls, header):
-            if minmax == min:
-                return "Min-%s" % header[cls.column]
-            return "Max-%s" % header[cls.column]
-    return Aggregator
+            @classmethod
+            def header(cls, header):
+                if minmax == min:
+                    return "Min-%s" % header[cls.column]
+                return "Max-%s" % header[cls.column]
+        return Aggregator
+    return MinMaxAggX
 
 
 def ModeAgg(col):
@@ -254,21 +258,23 @@ def GeomAvgAgg(col):
     return Aggregator
 
 
-class CounterAgg(object):
-    __slots__ = ["aggr"]
+def CounterAgg(_):
+    class Aggregator(object):
+        __slots__ = ["aggr"]
 
-    def __init__(self):
-        self.aggr = 0
+        def __init__(self):
+            self.aggr = 0
 
-    def __call__(self, line):
-        self.aggr += 1
+        def __call__(self, line):
+            self.aggr += 1
 
-    def __str__(self):
-        return "%g" % self.aggr
+        def __str__(self):
+            return "%g" % self.aggr
 
-    @classmethod
-    def header(cls, header):
-        return "Count"
+        @classmethod
+        def header(cls, header):
+            return "Count"
+    return Aggregator
 
 
 def aggregate(instream, keys, pivots, has_header, aggregators):
@@ -427,17 +433,14 @@ def main():
                    nargs="?", default=sys.stdin)
 
     p = sp.add_parser("aggr")
-    p.add_argument("--headers", "-H")
-    p.add_argument("--sdelim", default="|",
-                   help="output field sub-delimiter")
-    p.add_argument("--keys", "-k")
-    p.add_argument("--pivots", "-p")
-    p.add_argument("infile", type=argparse.FileType('r'),
-                   nargs="?", default=sys.stdin)
-    p.add_argument("--count", action="store_true")
+    p.add_argument("--keys", "-k", metavar="{columns}")
+    p.add_argument("--pivots", "-p", metavar="{columns}")
+    p.add_argument("--count", action="store_const", const='1')
     for op in ['p99', 'sum', 'avg', 'mode', 'min', 'max', 'distinct',
                'geommean', 'var']:
-        p.add_argument("--%s" % op)
+        p.add_argument("--%s" % op, metavar="{columns}")
+    p.add_argument("infile", type=argparse.FileType('r'),
+                   nargs="?", default=sys.stdin)
 
     args = gp.parse_args()
     if not args.command:
@@ -524,44 +527,22 @@ def main():
         if args.pivots:
             pivots, detectedh_agg = parse_keyspec(args.pivots, firstline)
             detected_header |= detectedh_agg
-        if args.count:
-            aggregators.append(CounterAgg)
-        if args.p99:
-            columns, detectedh_agg = parse_keyspec(args.p99, firstline)
-            aggregators.extend(PercentileAgg(99.0, c) for c in columns)
-            detected_header |= detectedh_agg
-        if args.sum:
-            columns, detectedh_agg = parse_keyspec(args.sum, firstline)
-            aggregators.extend(AdderAgg(c) for c in columns)
-            detected_header |= detectedh_agg
-        if args.avg:
-            columns, detectedh_agg = parse_keyspec(args.avg, firstline)
-            aggregators.extend(AvgAgg(c) for c in columns)
-            detected_header |= detectedh_agg
-        if args.mode:
-            columns, detectedh_agg = parse_keyspec(args.mode, firstline)
-            aggregators.extend(ModeAgg(c) for c in columns)
-            detected_header |= detectedh_agg
-        if args.min:
-            columns, detectedh_agg = parse_keyspec(args.min, firstline)
-            aggregators.extend(MinMaxAgg(min, c) for c in columns)
-            detected_header |= detectedh_agg
-        if args.max:
-            columns, detectedh_agg = parse_keyspec(args.max, firstline)
-            aggregators.extend(MinMaxAgg(max, c) for c in columns)
-            detected_header |= detectedh_agg
-        if args.distinct:
-            columns, detectedh_agg = parse_keyspec(args.distinct, firstline)
-            aggregators.extend(DistinctAgg(c) for c in columns)
-            detected_header |= detectedh_agg
-        if args.geommean:
-            columns, detectedh_agg = parse_keyspec(args.geommean, firstline)
-            aggregators.extend(GeomAvgAgg(c) for c in columns)
-            detected_header |= detectedh_agg
-        if args.var:
-            columns, detectedh_agg = parse_keyspec(args.var, firstline)
-            aggregators.extend(VarAgg(c) for c in columns)
-            detected_header |= detectedh_agg
+        for aggcols, Aggr in [
+                (args.count, CounterAgg),
+                (args.p99, PercentileAgg(99.0)),
+                (args.sum, AdderAgg),
+                (args.avg, AvgAgg),
+                (args.mode, ModeAgg),
+                (args.min, MinMaxAgg(min)),
+                (args.max, MinMaxAgg(max)),
+                (args.distinct, DistinctAgg),
+                (args.geommean, GeomAvgAgg),
+                (args.var, VarAgg)]:
+            if aggcols:
+                columns, detectedh_agg = parse_keyspec(aggcols, firstline)
+                aggregators.extend(Aggr(c) for c in columns)
+                detected_header |= detectedh_agg
+
         has_header = not args.no_header and detected_header
         out = aggregate(instream, keys, pivots, has_header, aggregators)
 
