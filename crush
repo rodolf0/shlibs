@@ -328,7 +328,8 @@ def column_writer(instream, odelim, outstream, norm_buffer=128):
             widths[colidx] = max(widths[colidx], len(value))
     # format output in columns with learnt widths
     instream = itertools.chain(normlines, instream)
-    outfmt = odelim.join("{:<%d}" % w for w in widths) + "\n"
+    outfmt = odelim.join(("{:<%d}" % w if i < len(widths) else "{}")
+                         for i, w in enumerate(widths, 1)) + "\n"
     outstream.writelines(outfmt.format(*l) for l in instream)
     outstream.flush()
 
