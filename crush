@@ -273,7 +273,9 @@ class CounterAgg(object):
 
 def aggregate(instream, keys, pivots, show_header, aggregators):
     "Aggregate values by keys, optionally break down by pivots"
-    header = next(instream) if show_header else None
+    header = ["col%d" % i for i in range(1, 50)]  # default header
+    if show_header:
+        header = next(instream)
     aggs, all_keys, all_pivs = {}, set(), set()
     for inline in instream:
         key = tuple(inline[f] for f in keys)
@@ -288,12 +290,12 @@ def aggregate(instream, keys, pivots, show_header, aggregators):
 
     all_keys, all_pivs = sorted(all_keys), sorted(all_pivs)
     # pivot columns: combination of all observed values for all pivots
-    pivcolumns = tuple("+".join("%s=%s" % (header[p], pv[i])
-                                for i, p in enumerate(pivots))
-                       for pv in all_pivs)
-    if show_header:
+    if show_header or len(pivots) > 0 or len(aggregators) > 0:
+        pivcolumns = tuple("+".join("%s=%s" % (header[p], pv[i])
+                                    for i, p in enumerate(pivots))
+                           for pv in all_pivs)
         yield tuple(header[k] for k in keys) + \
-            tuple("%s:%s" % (pivcol, a.header(header))
+            tuple("%s[%s]" % (a.header(header), pivcol)
                   for pivcol in pivcolumns for a in aggregators)
     emptyaggs = ['-'] * len(aggregators)
     for k in all_keys:
