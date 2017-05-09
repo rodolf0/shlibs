@@ -314,6 +314,11 @@ def aggregate(instream, keys, pivots, has_header, aggregators):
                         for a in aggs.get(k, {}).get(p, emptyaggs))
 
 
+def csv_writer(instream, outstream):
+    csv.writer(outstream).writerows(instream)
+    outstream.flush()
+
+
 def stream_writer(instream, odelim, outstream):
     outstream.writelines(odelim.join(l) + "\n" for l in instream)
     outstream.flush()
@@ -388,13 +393,12 @@ def main():
     gp = argparse.ArgumentParser()
     gp.add_argument("--delim", "-d", default=r"\s+",
                     help="regex to split input fields")
-    gp.add_argument("--odelim", "-o", default="\t",
-                    help="output field delimiter")
-    gp.add_argument("--no-col-normalize", "-C", action="store_true",
-                    help="don't normalize output column width")
-    gp.add_argument("--skip", type=int, help="skip first n lines")
     gp.add_argument("--csv", action="store_true",
                     help="use CSV reader instead of regex split")
+    gp.add_argument("--odelim", "-o", help="output field delimiter")
+    gp.add_argument("--ocsv", action="store_true",
+                    help="use CSV writer instead of odelim join")
+    gp.add_argument("--skip", type=int, help="skip first n lines")
     gp.add_argument("--no-header", "-N", action="store_true",
                     help="first line is data")
     sp = gp.add_subparsers(dest="command")
@@ -492,12 +496,13 @@ def main():
                         args.anyfield, args.icase, args.invert)
 
     elif args.command == "split":
+        odelim = args.odelim if len(args.odelim) > 0 else "\t"
         fields, detected_header = parse_keyspec(args.fields, firstline)
         has_header = not args.no_header and detected_header
         # discard header from input stream and replicate it on each output file
         header = next(instream) if has_header else None
         bucketfn = eval(args.bucket)
-        split_writer(instream, args.odelim, fields, header,
+        split_writer(instream, odelim, fields, header,
                      bucketfn, args.path, args.outpat)
         return  # don't use default writer
 
@@ -554,10 +559,12 @@ def main():
         has_header = not args.no_header and detected_header
         out = aggregate(instream, keys, pivots, has_header, aggregators)
 
-    if args.no_col_normalize:
+    if args.ocsv:
+        csv_writer(out, sys.stdout)
+    elif args.odelim:
         stream_writer(out, args.odelim, sys.stdout)
     else:
-        column_writer(out, args.odelim, sys.stdout)
+        column_writer(out, "\t", sys.stdout)
 
 
 if __name__ == "__main__":
