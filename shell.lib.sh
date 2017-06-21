@@ -24,6 +24,15 @@ tux() {
   TERM=screen-256color tmux -2 -u new-session -AD -s "$__tmuxsesid"
 }
 
+# get last command output from tmux pane buffer
+lastout() {
+  tmux capture-pane -pJ -S - |
+    tac |
+    sed '0,/^..:..:.. .* \$/d' |
+    sed -n '/^..:..:.. .* \$/q; p' |
+    tac
+}
+
 # check that only one script executes with a user chosen lock-file
 # if the file exists but the pid is no longer alive the script may run
 # returns 0 on success, 1 on failure
