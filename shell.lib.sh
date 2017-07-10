@@ -192,3 +192,16 @@ puptime() {
     tr '\n' : |
     awk -F: '{print ($1 + $2*60 + $3*3600 + $4* 86400)}'
 }
+
+encrypt() {
+  if [ $# -lt 1 ]; then
+    echo "usage: encrypt <infile>" >&2
+    return 1
+  fi
+  local infile="$1"
+  DISPLAY= \
+  gpg2 --cipher-algo AES256 \
+       --compress-algo zlib \
+       --pinentry-mode loopback \
+       --output "${infile}.gpg" --symmetric "$infile"
+}
