@@ -24,6 +24,23 @@ tux() {
   TERM=screen-256color tmux -2 -u new-session -AD -s "$__tmuxsesid"
 }
 
+# build a tmux session with notes, jupyter, etc...
+ctx() {
+  # terminal control: http://invisible-island.net/xterm/ctlseqs/ctlseqs.html
+  if ! tmux has-session -t context; then
+    tmux new-session -d -s context -n notes \
+                    'nvim ~/notes/weekly.log.md'
+    tmux new-window -d -t context: -n jupyter \
+                    -c ~/Source/notebooks \
+                    'jupyter notebook --no-browser'
+    tmux new-window -d -t context: -n ujarvis \
+                    -c ~/Source/ujarvis \
+                    'while sleep 1; do cargo build && ./target/debug/ujarvis; done'
+  fi
+  # gain control of the session
+  tmux -u -2 attach-session -d -t context
+}
+
 # get last command output from tmux pane buffer
 lastout() {
   tmux capture-pane -pJ -S - |
