@@ -1,406 +1,176 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # All credits and glory go to https://code.google.com/p/crush-tools
 # just keeping this python portable version handy for small inputs
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
+import itertools
+import sys, os, re, csv, math
 
 from collections import defaultdict
-from operator import itemgetter
-import itertools
-import math
-import os
-import re
-import sys
-import csv
 
 
-def reorder(instream, fields):
+def reorder(istream, fields):
     "Select which fields from input stream are copied to output"
-    for inline in instream:
-        yield list(inline[f] for f in fields)
+    for inline in istream:
+        yield tuple(inline[f] for f in fields)
 
 
-def add_field(instream, addspecs, has_header):
-    "Add fields to stream, addspec: [(insert-idx, value, header)...]"
-    addspecs = list(addspecs)
-    if has_header:
-        line = next(instream)
-        for idx, _, hdr in addspecs:
-            line.insert(idx, hdr)
-        yield line
-    for line in instream:
-        for idx, val, _ in addspecs:
-            line.insert(idx, val)
-        yield line
+def aggregate(istream, keys, pivots, aggregations, header):
+    "Aggregate values by keys, optionally break down by pivots"
+    header = header or ["col%d" % i for i in range(1, 50)]
+    aggfields = set.union(*[set(f) for f in aggregations.values()])
+    all_keys, all_pivots, values = set(), set(), defaultdict(list)
+    # aggregate lines
+    for line in istream:
+        key = tuple(line[k] for k in keys)
+        pivot = tuple(line[p] for p in pivots)
+        all_keys.add(key)
+        all_pivots.add(pivot)
+        for a in aggfields:
+            values[(key, pivot, a)].append(line[a])
+
+    all_keys, all_pivots = sorted(all_keys), sorted(all_pivots)
+    # pivot columns: combination of all observed values for all pivots
+    pivcols = tuple("+".join("%s=%s" % (header[p], pv[i])
+                             for i, p in enumerate(pivots))
+                    for pv in all_pivots)
+    # for each pivot column: build the aggregation columns we need
+    aggcols = tuple("%s%s%s" % (agg, "-" + header[aggcol]
+                                if agg != 'count' and len(aggcols) > 1 else '',
+                                '[' + pc + ']' if pc else '')
+                    for agg, aggcols in aggregations.items()
+                    for aggcol in aggcols
+                    for pc in pivcols)
+    yield tuple(header[k] for k in keys) + aggcols
+
+    # write aggregations
+    def _do_agg(fn, values):
+        if len(values) == 0: return '-'
+        if fn == 'avg': return "%.12g" % (sum(map(float, values)) / len(values))
+        if fn == 'count': return str(len(values))
+        if fn == 'uniq': return str(len(set(values)))
+        if fn == 'max': return "%.12g" % max(map(float, values))
+        if fn == 'min': return "%.12g" % min(map(float, values))
+        if fn == 'sum': return "%.12g" % sum(map(float, values))
+        if fn[0] == 'p':
+            pct = float(fn[1:])
+            values = sorted(map(float, values))
+            return "%.12g" % values[int(len(values) * pct/100.0 - 0.5)]
+
+    for k in all_keys:
+        yield k + tuple(_do_agg(fn, values[(k, p, a)])
+                        for fn, aggcols in aggregations.items()
+                        for a in aggcols
+                        for p in all_pivots)
 
 
-def grepfield(instream, grepspec, has_header, anyfield, icase, invert):
-    "Filter stream by fields matching regex, grepspec: [(field, pattern)...]"
-    flags = re.I if icase else 0
-    regexes = tuple((idx, re.compile(pat, flags)) for idx, pat in grepspec)
-    if has_header:
-        yield next(instream)
-    fn = any if anyfield else all
-    if invert:
-        for line in instream:
-            if fn(not regex.search(line[idx]) for idx, regex in regexes):
-                yield line
-    else:
-        for line in instream:
-            if fn(regex.search(line[idx]) for idx, regex in regexes):
-                yield line
-
-
-def calcfields(instream, calcspec, has_header, filter_rows):
+def calcfields(instream, calcspec, filter_rows, header):
     "Calculate new columns using python, calcspec: [(expr, header)...]"
     calcspec = list(calcspec)
-    if has_header:
-        line = next(instream)
-        if not filter_rows:
-            line.extend(header for _, header in calcspec)
-        yield line
+    if header:
+        yield header + [h for _, h in calcspec]
     for line in instream:
         exprs = [fn(*[line[i] for i in args]) for (fn, args), _ in calcspec]
         if not filter_rows:
             yield line + [str(x) for x in exprs]
-        elif filter_rows and all(exprs):
+        elif all(exprs):
             yield line
 
 
-def PercentileAgg(pct):
-    def PercentileXAgg(col):
-        class Aggregator(object):
-            __slots__ = ["aggr"]
-            percentile = pct
-            column = col
+def windows():
+    pass
 
-            def __init__(self):
-                self.aggr = []
-
-            def __call__(self, line):
-                self.aggr.append(float(line[self.column]))
-
-            def __str__(self):
-                self.aggr.sort()
-                idx = int(len(self.aggr) * self.percentile / 100.0)
-                return "%.12g" % self.aggr[idx]
-
-            @classmethod
-            def header(cls, header):
-                return "p%g-%s" % (cls.percentile, header[cls.column])
-        return Aggregator
-    return PercentileXAgg
-
-
-def DistinctAgg(col):
-    class Aggregator(object):
-        __slots__ = ["aggr"]
-        column = col
-
-        def __init__(self):
-            self.aggr = set()
-
-        def __call__(self, line):
-            self.aggr.add(line[self.column])
-
-        def __str__(self):
-            return str(len(self.aggr))
-
-        @classmethod
-        def header(cls, header):
-            return "Distinct-%s" % header[cls.column]
-    return Aggregator
-
-
-def MinMaxAgg(minmax):
-    def MinMaxAggX(col):
-        class Aggregator(object):
-            __slots__ = ["aggr"]
-            column = col
-
-            def __init__(self):
-                self.aggr = None
-
-            def __call__(self, line):
-                if self.aggr is None:
-                    self.aggr = float(line[self.column])
-                else:
-                    self.aggr = minmax(self.aggr, float(line[self.column]))
-
-            def __str__(self):
-                return "%.12g" % self.aggr
-
-            @classmethod
-            def header(cls, header):
-                if minmax == min:
-                    return "Min-%s" % header[cls.column]
-                return "Max-%s" % header[cls.column]
-        return Aggregator
-    return MinMaxAggX
-
-
-def ModeAgg(col):
-    class Aggregator(object):
-        __slots__ = ["aggr"]
-        column = col
-
-        def __init__(self):
-            self.aggr = defaultdict(int)
-
-        def __call__(self, line):
-            val = line[self.column]
-            self.aggr[val] += 1
-
-        def __str__(self):
-            return max(self.aggr.items(), key=itemgetter(1))[0]
-
-        @classmethod
-        def header(cls, header):
-            return "Mode-%s" % header[cls.column]
-    return Aggregator
-
-
-def AdderAgg(col):
-    class Aggregator(object):
-        __slots__ = ["aggr"]
-        column = col
-
-        def __init__(self):
-            self.aggr = 0.0
-
-        def __call__(self, line):
-            self.aggr += float(line[self.column])
-
-        def __str__(self):
-            return "%.12g" % self.aggr
-
-        @classmethod
-        def header(cls, header):
-            return "Sum-%s" % header[cls.column]
-    return Aggregator
-
-
-def AvgAgg(col):
-    class Aggregator(object):
-        __slots__ = ["sum", "count"]
-        column = col
-
-        def __init__(self):
-            self.sum = 0.0
-            self.count = 0
-
-        def __call__(self, line):
-            self.sum += float(line[self.column])
-            self.count += 1
-
-        def __str__(self):
-            if self.count == 0:
-                return "0"
-            return "%.12g" % (self.sum/self.count)
-
-        @classmethod
-        def header(cls, header):
-            return "Avg-%s" % header[cls.column]
-    return Aggregator
-
-
-def VarAgg(col):
-    class Aggregator(object):
-        __slots__ = ["ex", "n", "ex2", "K"]
-        column = col
-
-        def __init__(self):
-            self.ex = 0.0
-            self.ex2 = 0.0
-            self.K = 0.0
-            self.n = 0
-
-        def __call__(self, line):
-            x = float(line[self.column])
-            if self.n == 0:
-                self.K = x
-            self.n += 1
-            self.ex += x - self.K
-            self.ex2 += (x - self.K) * (x - self.K)
-
-        def __str__(self):
-            if self.n < 2:
-                return "0"
-            x = ((self.ex2 - (self.ex * self.ex) / self.n) / (self.n - 1))
-            return "%.12g" % x
-
-        @classmethod
-        def header(cls, header):
-            return "Avg-%s" % header[cls.column]
-    return Aggregator
-
-
-def GeomAvgAgg(col):
-    class Aggregator(object):
-        __slots__ = ["prod", "count"]
-        column = col
-
-        def __init__(self):
-            self.prod = 1.0
-            self.count = 0
-
-        def __call__(self, line):
-            self.prod *= float(line[self.column])
-            self.count += 1
-
-        def __str__(self):
-            if self.count == 0:
-                return "0"
-            return "%.12g" % math.pow(self.prod, 1.0/self.count)
-
-        @classmethod
-        def header(cls, header):
-            return "GeomAvg-%s" % header[cls.column]
-    return Aggregator
-
-
-def CounterAgg(_):
-    class Aggregator(object):
-        __slots__ = ["aggr"]
-
-        def __init__(self):
-            self.aggr = 0
-
-        def __call__(self, line):
-            self.aggr += 1
-
-        def __str__(self):
-            return "%g" % self.aggr
-
-        @classmethod
-        def header(cls, header):
-            return "Count"
-    return Aggregator
-
-
-def aggregate(instream, keys, pivots, has_header, aggregators):
-    "Aggregate values by keys, optionally break down by pivots"
-    header = ["col%d" % i for i in range(1, 50)]  # default header
-    if has_header:
-        header = next(instream)
-    aggs, all_keys, all_pivs = {}, set(), set()
-    for inline in instream:
-        key = tuple(inline[f] for f in keys)
-        piv = tuple(inline[f] for f in pivots)
-        all_keys.add(key)
-        all_pivs.add(piv)
-        agg = aggs.setdefault(key, {})
-        # initialize a list of aggregators for each new key/pivot
-        agg = agg.setdefault(piv, tuple(a() for a in aggregators))
-        for aggregator in agg:
-            aggregator(inline)  # aggregate line
-
-    all_keys, all_pivs = sorted(all_keys), sorted(all_pivs)
-    # pivot columns: combination of all observed values for all pivots
-    if has_header or len(pivots) > 0 or len(aggregators) > 0:
-        pivcolumns = tuple("+".join("%s=%s" % (header[p], pv[i])
-                                    for i, p in enumerate(pivots))
-                           for pv in all_pivs)
-        yield tuple(header[k] for k in keys) + \
-            tuple("%s[%s]" % (a.header(header), pivcol)
-                  for pivcol in pivcolumns for a in aggregators)
-    emptyaggs = ['-'] * len(aggregators)
-    for k in all_keys:
-        yield k + tuple(str(a) for p in all_pivs
-                        for a in aggs.get(k, {}).get(p, emptyaggs))
-
-
-def csv_writer(instream, outstream):
-    csv.writer(outstream).writerows(instream)
-    outstream.flush()
-
-
-def stream_writer(instream, odelim, outstream):
-    outstream.writelines(odelim.join(l) + "\n" for l in instream)
-    outstream.flush()
-
-
-def column_writer(instream, odelim, outstream, norm_buffer=128):
-    # inspect first lines to estimate column widths
-    normlines = list(itertools.islice(instream, norm_buffer))
-    widths = [len(col) for col in normlines[0]] if len(normlines) > 0 else []
-    for line in normlines:
-        for colidx, value in enumerate(line):
-            widths[colidx] = max(widths[colidx], len(value))
-    # format output in columns with learnt widths
-    instream = itertools.chain(normlines, instream)
-    outfmt = odelim.join(("{:<%d}" % w if i < len(widths) else "{}")
-                         for i, w in enumerate(widths, 1)) + "\n"
-    outstream.writelines(outfmt.format(*l) for l in instream)
-    outstream.flush()
-
-
-def split_writer(instream, odelim, fieldspec, header, bucket, outpath, outpat):
+def splitstream(istream, splitspec, bucketfn, outpath, outpat, header, wrmaker):
     "Split input stream into different files"
-    ostreams, wrote_headers = {}, set()
-    try:
-        for line in instream:
-            # bucket function is called with selected fields
-            # eg: -f 2,3  --->  lambda x, y: <bucket-logic>
-            b = bucket(*tuple(line[arg] for arg in fieldspec))
-            # check if we need to open the output stream
-            if b not in ostreams:
-                filename = outpat.replace("%", b)
-                outfile = os.path.join(outpath, filename)
-                try:
-                    ostreams[b] = open(outfile, "a")
-                except IOError as e:
-                    if e.errno != 24:  # too many open files
-                        raise
-                    for f in ostreams.values():
-                        f.close()
-                    ostreams = {b: open(outfile, "a")}
-                # only write header once to each file even if reopening
-                if header and b not in wrote_headers:
-                    wrote_headers.add(b)
-                    ostreams[b].write(odelim.join(header) + "\n")
-            ostreams[b].write(odelim.join(line) + "\n")
-    finally:
-        for f in ostreams.values():
-            f.close()
+    wrote_headers = set()
+    def _flush(bucket, stream):
+        outfile = os.path.join(outpath, outpat.replace("%", bucket))
+        with open(outfile, "a") as out:
+            if header and bucket not in wrote_headers:
+                wrote_headers.add(bucket)
+                stream = itertools.chain([header], stream)
+            wrmaker(out)(stream)
+
+    ostreams = defaultdict(list)
+    for line in istream:
+        # bucket function is called with 'splitspec' fields
+        # eg: -f 2,3  --->  lambda x, y: <bucket-logic>
+        b = bucketfn(*tuple(line[arg] for arg in splitspec))
+        stream = ostreams[b]
+        stream.append(line)
+        # flush to file if we've got enough rows
+        if len(stream) > 255:
+            _flush(b, stream)
+            del ostreams[b]
+    # flush pending data
+    for b, stream in ostreams.items():
+        _flush(b, stream)
 
 
-# resolve field references into column indexes
-# also try to figure out if first-line is a header or data
-def parse_keyspec(keyspec, maybeheader):
-    idxs, detected_header = [], False
+def parse_keyspec(keyspec, header):
+    "Expand keyspec into a list of fields, header are for named fields"
+    if not keyspec:
+        return []
+    idxs = []
     for spec in keyspec.split(","):
-        if spec in maybeheader:
-            idxs.append(maybeheader.index(spec))
-            detected_header = True
+        if header:
+            if spec in header:
+                idxs.append(header.index(spec))
+            else:
+                print("unknown field: " + spec, file=sys.stderr)
+                sys.exit(1)
         elif "-" in spec:
             start, _, end = spec.partition("-")
-            start, end = int(start or 1), int(end or len(maybeheader))
+            start, end = int(start), int(end)
             idxs.extend(range(start - 1, end))
         else:
             idxs.append(int(spec) - 1)
-    assert all(0 <= k < len(maybeheader) for k in idxs)
-    return idxs, detected_header
+    return idxs
+
+
+def build_reader(args):
+    "Check how to interpret input stream"
+    if args.csv:
+        return csv.reader(args.infile)
+    elif len(args.delim) == 1:
+        return (l.rstrip("\r\n").split(args.delim) for l in args.infile)
+    _delim = re.compile(args.delim)
+    return (_delim.split(l.rstrip("\r\n")) for l in args.infile)
+
+
+def build_writer(args, ostream):
+    "Return a function to write results"
+    if args.ocsv:
+        def _csv_writer(istream):
+            csv.writer(ostream).writerows(istream)
+            ostream.flush()
+        return _csv_writer
+    elif args.odelim:
+        def _odelim_writer(istream):
+            ostream.writelines(args.odelim.join(l) + "\n" for l in istream)
+            ostream.flush()
+        return _odelim_writer
+    # fixed-width column writer
+    def _fixed_width_writer(istream):
+        normalized = list(itertools.islice(istream, 128))
+        widths = [len(l) for l in normalized[0]] if len(normalized) > 0 else []
+        for line in normalized:
+            widths = [max(widths[i], len(col)) for i, col in enumerate(line)]
+        outfmt = '  '.join("{:<%d}" % w for i, w in enumerate(widths)) + "\n"
+        ostream.writelines(outfmt.format(*l) for l in istream)
+        ostream.flush()
+    return _fixed_width_writer
 
 
 # cmdline parsing
 def main():
     import argparse
     gp = argparse.ArgumentParser()
-    gp.add_argument("--delim", "-d", default=r"\s+",
-                    help="regex to split input fields")
-    gp.add_argument("--csv", action="store_true",
-                    help="use CSV reader instead of regex split")
+    gp.add_argument("--delim", "-d", default=r"\s+")
     gp.add_argument("--odelim", "-o", help="output field delimiter")
-    gp.add_argument("--ocsv", action="store_true",
-                    help="use CSV writer instead of odelim join")
-    gp.add_argument("--skip", type=int, help="skip first n lines")
-    gp.add_argument("--no-header", "-N", action="store_true",
-                    help="first line is data")
+    gp.add_argument("--csv", action="store_true")
+    gp.add_argument("--ocsv", action="store_true")
+    gp.add_argument("--header", "-H", action="store_true")
     sp = gp.add_subparsers(dest="command")
 
     p = sp.add_parser("cut")
@@ -408,49 +178,31 @@ def main():
     p.add_argument("infile", type=argparse.FileType('r'),
                    nargs="?", default=sys.stdin)
 
-    p = sp.add_parser("addfield")
-    p.add_argument("--idxs", "-i", required=True)
-    p.add_argument("--values", "-v", required=True)
-    p.add_argument("--headers", "-H")
+    p = sp.add_parser("agg")
+    p.add_argument("--keys", "-k", metavar="{columns}")
+    p.add_argument("--pivots", "-p", metavar="{columns}")
+    p.add_argument("--count", action="store_const", const='1')
+    p.add_argument("--pct", metavar=('{pX}:{columns},...'), nargs='+')
+    for op in ['sum', 'avg', 'min', 'max', 'uniq']: # 'mode', 'gmean', 'var'
+        p.add_argument("--%s" % op, metavar="{columns}")
     p.add_argument("infile", type=argparse.FileType('r'),
                    nargs="?", default=sys.stdin)
 
-    p = sp.add_parser("grep")
-    p.add_argument("--invert", "-v", action="store_true")
-    p.add_argument("--icase", "-i", action="store_true")
-    p.add_argument("--anyfield", "-a", action="store_true")
-    p.add_argument("--fields", "-f", required=True)
-    p.add_argument("patterns", nargs="+")
+    p = sp.add_parser("calc")
+    p.add_argument("--headers", "-H")
+    p.add_argument("--filter", "-f", action="store_true")
+    p.add_argument("exprs", nargs="+")
     p.add_argument("infile", type=argparse.FileType('r'),
                    nargs="?", default=sys.stdin)
 
     p = sp.add_parser("split")
     p.add_argument("--fields", "-f", required=True,
                    help="arguments to the partition function")
-    p.add_argument("--bucket", "-b",
-                   default="lambda x: str(abs(hash(x)) % 10)",
-                   help="Partition function, eg lambda x, y: x+y")
+    p.add_argument("--bucket", "-b", default="lambda x: str(x)",
+                   help="bucket function eg: lambda x: str(abs(hash(x)) % 10)")
     p.add_argument("--path", "-p", default=".")
     p.add_argument("--outpat", "-o", default="%",
                    help="Output filename pattern, %% is the bucket name")
-    p.add_argument("infile", type=argparse.FileType('r'),
-                   nargs="?", default=sys.stdin)
-
-    p = sp.add_parser("calc")
-    p.add_argument("--headers", "-H")
-    p.add_argument("--filter", "-f", action="store_true",
-                   help="only keep rows matching expressions")
-    p.add_argument("exprs", nargs="+")
-    p.add_argument("infile", type=argparse.FileType('r'),
-                   nargs="?", default=sys.stdin)
-
-    p = sp.add_parser("aggr")
-    p.add_argument("--keys", "-k", metavar="{columns}")
-    p.add_argument("--pivots", "-p", metavar="{columns}")
-    p.add_argument("--count", action="store_const", const='1')
-    for op in ['p99', 'sum', 'avg', 'mode', 'min', 'max', 'distinct',
-               'geommean', 'var']:
-        p.add_argument("--%s" % op, metavar="{columns}")
     p.add_argument("infile", type=argparse.FileType('r'),
                    nargs="?", default=sys.stdin)
 
@@ -458,113 +210,77 @@ def main():
     if not args.command:
         return gp.print_help()
 
-    if args.csv:
-        instream = csv.reader(args.infile)
-    elif len(args.delim) == 1:
-        instream = (l.rstrip("\r\n").split(args.delim) for l in args.infile)
-    else:
-        delim = re.compile(args.delim)
-        instream = (delim.split(l.rstrip("\r\n")) for l in args.infile)
-    if args.skip:
-        instream = itertools.islice(instream, args.skip, None)
-    firstline = next(instream)
-    instream = itertools.chain([firstline], instream)
-    out = None
+    # choose how we consume input / write output
+    istream = build_reader(args)
+    owriter = build_writer(args, sys.stdout)
 
-    # Headers are always printed if found or can be produced
-    # a. has no input-header (or treated as data -N) -> no output-header
-    # b. has input-header -> we always print it (filter out some other way)
+    # to address columns by name we need to say so explicitly
+    header = next(istream) if args.header else None
 
+    # dispatch subcommand
     if args.command == "cut":
-        fields, _ = parse_keyspec(args.fields, firstline)
-        out = reorder(instream, fields)
+        fields = parse_keyspec(args.fields, header)
+        if header:
+            istream = itertools.chain([header], istream)
+        owriter(reorder(istream, fields))
 
-    elif args.command == "addfield":
-        fields, detected_header = parse_keyspec(args.idxs, firstline)
-        has_header = not args.no_header and (detected_header or args.headers)
-        assert args.headers is None or len(args.headers) == len(args.values)
-        newheaders = args.headers if args.headers else args.values
-        addspec = zip(fields, args.values.split(","), newheaders.split(","))
-        out = add_field(instream, addspec, has_header)
-
-    elif args.command == "grep":
-        fields, detected_header = parse_keyspec(args.fields, firstline)
-        has_header = not args.no_header and detected_header
-        assert len(fields) == len(args.patterns)
-        grepspec = zip(fields, args.patterns)
-        out = grepfield(instream, grepspec, has_header,
-                        args.anyfield, args.icase, args.invert)
-
-    elif args.command == "split":
-        odelim = args.odelim if len(args.odelim) > 0 else "\t"
-        fields, detected_header = parse_keyspec(args.fields, firstline)
-        has_header = not args.no_header and detected_header
-        # discard header from input stream and replicate it on each output file
-        header = next(instream) if has_header else None
-        bucketfn = eval(args.bucket)
-        split_writer(instream, odelim, fields, header,
-                     bucketfn, args.path, args.outpat)
-        return  # don't use default writer
+    elif args.command == "agg":
+        keys = parse_keyspec(args.keys, header) if args.keys else []
+        pivots = parse_keyspec(args.pivots, header) if args.pivots else []
+        aggregations = {
+            'avg': parse_keyspec(args.avg, header),
+            'count': [0] if args.count else [],
+            #'gmean': parse_keyspec(args.gmean, header),
+            'max': parse_keyspec(args.max, header),
+            'min': parse_keyspec(args.min, header),
+            #'mode': parse_keyspec(args.mode, header),
+            'sum': parse_keyspec(args.sum, header),
+            'uniq': parse_keyspec(args.uniq, header),
+            #'var': parse_keyspec(args.var, header),
+        }
+        if args.pct:
+            for px in args.pct:
+                px, columns = px.split(":")
+                aggregations['p%s' % px] = parse_keyspec(columns, header)
+        owriter(aggregate(istream, keys, pivots, aggregations, header))
 
     elif args.command == "calc":
-        argre = re.compile(r"({[^}]+})")
-        calcfuncs, detected_header = [], False
+        argre = re.compile(r"(?:{[^}]+})")
+        calcfuncs = []
         # for each expression we need to build a lambda that calculates it
         for expr in args.exprs:
             # find all references to fields within the expression
             reffields = argre.findall(expr)
             # resolve field references into indexes
             fieldspec = ",".join(f.strip("{}") for f in reffields)
-            fieldspec, detected_h = parse_keyspec(fieldspec, firstline)
-            detected_header |= detected_h
-            # make a variable for each referenced field
-            varnames = ["_x%d" % i for i in fieldspec]
+            fieldspec = parse_keyspec(fieldspec, header)
+            # make anonymous variable for each referenced field
+            varnames = ["__x%d" % i for i in fieldspec]
             # re-write expression to use variables
             for field, var in zip(reffields, varnames):
                 expr = expr.replace(field, var)
             # evaluate text into a function object
-            expr = eval("lambda %s: %s" % (", ".join(varnames), expr))
+            try:
+                expr = eval("lambda %s: %s" % (", ".join(varnames), expr))
+            except SyntaxError:
+                print("failed to parse: " + expr, file=sys.stderr)
+                sys.exit(1)
             calcfuncs.append((expr, fieldspec))
-        has_header = not args.no_header and (detected_header or args.headers)
         exprheaders = args.headers.split(",") if args.headers else args.exprs
         assert args.headers is None or len(exprheaders) == len(args.exprs)
         calcspec = zip(calcfuncs, exprheaders)
-        out = calcfields(instream, calcspec, has_header, args.filter)
+        owriter(calcfields(istream, calcspec, args.filter, header))
 
-    elif args.command == "aggr":
-        keys, pivots, aggregators = [], [], []
-        detected_header = False
-        if args.keys:
-            keys, detectedh_agg = parse_keyspec(args.keys, firstline)
-            detected_header |= detectedh_agg
-        if args.pivots:
-            pivots, detectedh_agg = parse_keyspec(args.pivots, firstline)
-            detected_header |= detectedh_agg
-        for aggcols, Aggr in [
-                (args.count, CounterAgg),
-                (args.p99, PercentileAgg(99.0)),
-                (args.sum, AdderAgg),
-                (args.avg, AvgAgg),
-                (args.mode, ModeAgg),
-                (args.min, MinMaxAgg(min)),
-                (args.max, MinMaxAgg(max)),
-                (args.distinct, DistinctAgg),
-                (args.geommean, GeomAvgAgg),
-                (args.var, VarAgg)]:
-            if aggcols:
-                columns, detectedh_agg = parse_keyspec(aggcols, firstline)
-                aggregators.extend(Aggr(c) for c in columns)
-                detected_header |= detectedh_agg
-
-        has_header = not args.no_header and detected_header
-        out = aggregate(instream, keys, pivots, has_header, aggregators)
-
-    if args.ocsv:
-        csv_writer(out, sys.stdout)
-    elif args.odelim:
-        stream_writer(out, args.odelim, sys.stdout)
-    else:
-        column_writer(out, "\t", sys.stdout)
+    elif args.command == "split":
+        splitspec = parse_keyspec(args.fields, header)
+        try:
+            bucketfn = eval(args.bucket)
+        except SyntaxError:
+            print("failed to parse: " + args.bucket, file=sys.stderr)
+            sys.exit(1)
+        splitstream(istream, splitspec, bucketfn,
+                    args.path, args.outpat, header,
+                    lambda ostream: build_writer(args, ostream))
 
 
 if __name__ == "__main__":
