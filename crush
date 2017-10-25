@@ -152,7 +152,9 @@ def build_writer(args, ostream):
         return _odelim_writer
     # fixed-width column writer
     def _fixed_width_writer(istream):
+        istream = iter(istream) # treat lists and generators equally
         normalized = list(itertools.islice(istream, 128))
+        istream = itertools.chain(normalized, istream)
         widths = [len(l) for l in normalized[0]] if len(normalized) > 0 else []
         for line in normalized:
             widths = [max(widths[i], len(col)) for i, col in enumerate(line)]
