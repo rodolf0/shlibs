@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+
+set -e
+
+# chrome UI size is using: text-scaling-factor
+# gnome-shell UI is using: scaling-factor + xsettings overrides
+
+show_scaling() {
+  echo -n "settings daemon overrides: "
+  gsettings get org.gnome.settings-daemon.plugins.xsettings overrides
+  echo -n "gnome scaling factor: "
+  gsettings get org.gnome.desktop.interface scaling-factor
+  echo -n "gnome text-scaling factor: "
+  gsettings get org.gnome.desktop.interface text-scaling-factor
+}
+
+get_scaling() {
+  gsettings get org.gnome.settings-daemon.plugins.xsettings overrides |
+    grep -o "'Gdk/WindowScalingFactor': <[0-9.]\+>" |
+    sed 's!^.*<!!; s!>.*$!!'
+}
+
+set_scaling() {
+  local gdk_window_scaling="$1"
+  local gnome_scaling_factor="$2"
+  local gnome_text_scaling_factor="${3:-1}"
+  gsettings set org.gnome.settings-daemon.plugins.xsettings \
+            overrides "{'Gdk/WindowScalingFactor': <${gdk_window_scaling}>}"
+  gsettings set org.gnome.desktop.interface \
+            scaling-factor "$gnome_scaling_factor"
+  gsettings set org.gnome.desktop.interface \
+            text-scaling-factor "$gnome_text_scaling_factor"
+}
+
+_win_width() {
+  xdotool getwindowgeometry "$1" |
+    awk '/Geometry/ {split($2, x, "x"); print x[1]}'
+}
+
+_win_height() {
+  xdotool getwindowgeometry "$1" |
+    awk '/Geometry/ {split($2, x, "x"); print x[2]}'
+}
+
+_display_width() {
+  xdotool getdisplaygeometry | awk '{print $1}'
+}
+
+_display_height() {
+  xdotool getdisplaygeometry | awk '{print $2}'
+}
+
+_get_winid() {
+  local class="$1"
+  local win="$(xdotool search --class "^${class}$")"
+  if [ -z "$win" ]; then
+    echo "mouse over '$class' window then hit enter" >&2; read
+    win="$(xdotool getmouselocation --shell | awk -F= '/WINDOW/ {print $2}')"
+    if [ -z "$win" ]; then
+      echo "failed to find '$class' win"; exit 1
+    fi
+    xdotool set_window --class "$class" "$win"
+  fi
+  echo "$win"
+}
+
+layout_large() {
+  local ctxwin=$(_get_winid ctx)
+  xdotool windowsize "$ctxwin" 26% 100%
+  local _x=$(($(_display_width) - $(_win_width "$ctxwin") - 10))
+  local _y=$(( ( $(_display_height) - $(_win_height "$ctxwin") ) / 2 - 30 ))
+  xdotool windowmove "$ctxwin" "$_x" "$_y"
+
+  local devvmwin=$(_get_winid devvm)
+  xdotool windowsize "$devvmwin" 72% 97%
+  local _y=$(( ( $(_display_height) - $(_win_height "$devvmwin") ) / 2 - 30 ))
+  xdotool windowmove "$devvmwin" 25 "$_y"
+
+  local chromepersonalwin=$(_get_winid chrome_personal)
+  xdotool windowsize "$chromepersonalwin" 45% 80%
+  xdotool windowmove "$chromepersonalwin" 350 200
+
+  local chromeworkwin=$(_get_winid chrome_work)
+  xdotool windowsize "$chromeworkwin" 73% 95%
+  xdotool windowmove "$chromeworkwin" 10 40
+}
+
+
+layout_small() {
+  local ctxwin=$(_get_winid ctx)
+  xdotool windowsize "$ctxwin" 34% 95%
+  local _x=$(($(_display_width) - $(_win_width "$ctxwin") - 10))
+  local _y=$(( ( $(_display_height) - $(_win_height "$ctxwin") ) / 2 - 30 ))
+  xdotool windowmove "$ctxwin" "$_x" "$_y"
+
+  local devvmwin=$(_get_winid devvm)
+  xdotool windowsize "$devvmwin" 65% 95%
+  local _y=$(( ( $(_display_height) - $(_win_height "$devvmwin") ) / 2 - 30 ))
+  xdotool windowmove "$devvmwin" 10 "$_y"
+
+  local chromepersonalwin=$(_get_winid chrome_personal)
+  xdotool windowsize "$chromepersonalwin" 85% 90%
+  xdotool windowmove "$chromepersonalwin" 100 100
+
+  local chromeworkwin=$(_get_winid chrome_work)
+  xdotool windowsize "$chromeworkwin" 85% 90%
+  xdotool windowmove "$chromeworkwin" 120 90
+}
+
+
+layout_focus() {
+  local devvmwin=$(_get_winid devvm)
+  xdotool windowsize "$devvmwin" 50% 100%
+  local _x=$(($(_display_width) / 4 - 60))
+  xdotool windowmove "$devvmwin" "$_x" 0
+}
+
+
+## main
+case "$1" in
+  scr|screen)
+    case "$2" in
+      laptop) set_scaling 2 2 1 ;;
+      work) set_scaling 1 1 1 ;;
+      huge) set_scaling 1 1 1.5 ;;
+      *) echo "usage: $0 screen < laptop | work | huge >" >&2 ;;
+    esac
+    ;;
+
+  layout|lay)
+    case "$2" in
+      focus) layout_focus ;;
+      small) layout_small ;;
+      large) layout_large ;;
+      *) echo "usage: $0 layout < focus | small | large >" >&2 ;;
+    esac
+    ;;
+
+  work) set_scaling 1 1 1; layout_large ;;
+  home) set_scaling 1 1 1.5; layout_large ;;
+  lap|small) set_scaling 2 2 1; layout_small ;;
+
+  *)
+    echo -e "usage: $0 < work | home | lap >" >&2
+    echo -e "usage: $0 < screen | layout >\n" >&2
+    show_scaling >&2
+    ;;
+
+esac
