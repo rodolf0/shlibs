@@ -137,11 +137,18 @@ case "$1" in
 
   work) set_scaling 1 1 1; layout_large ;;
   home) set_scaling 1 1 1.5; layout_large ;;
-  lap|small) set_scaling 2 2 1; layout_small ;;
+  lap) set_scaling 2 2 1; layout_small ;;
+
+  large)
+    _active=$(xdotool getactivewindow)
+    xdotool windowsize "$_active" 50% 95% \
+            windowmove "$_active" "$(($(_display_width) / 4 - 60))" 0
+    ;;
 
   *)
     echo -e "usage: $0 < work | home | lap >" >&2
     echo -e "usage: $0 < screen | layout >\n" >&2
+    echo -e "usage: $0 < large >\n" >&2
     show_scaling >&2
     ;;
 
