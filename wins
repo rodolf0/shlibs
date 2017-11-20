@@ -71,11 +71,11 @@ layout_large() {
   local ctxwin=$(_get_winid ctx)
   local _x=$(($(_display_width) - $(_win_width "$ctxwin") - 10))
   xdotool windowsize "$ctxwin" 26% 96% \
-          windowmove "$ctxwin" "$_x" 50
+          windowmove "$ctxwin" "$_x" 35
 
   local devvmwin=$(_get_winid devvm)
   xdotool windowsize "$devvmwin" 72% 96% \
-          windowmove "$devvmwin" 20 50
+          windowmove "$devvmwin" 20 35
 
   local chromepersonalwin=$(_get_winid chrome_personal)
   xdotool windowsize "$chromepersonalwin" 45% 80%
