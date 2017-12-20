@@ -22,14 +22,14 @@ get_scaling() {
 
 set_scaling() {
   local gdk_window_scaling="$1"
-  local gnome_scaling_factor="$2"
-  local gnome_text_scaling_factor="${3:-1}"
+  local gnome_text_scaling_factor="$2"
+  #local gnome_scaling_factor="$3"
   gsettings set org.gnome.settings-daemon.plugins.xsettings \
             overrides "{'Gdk/WindowScalingFactor': <${gdk_window_scaling}>}"
   gsettings set org.gnome.desktop.interface \
-            scaling-factor "$gnome_scaling_factor"
-  gsettings set org.gnome.desktop.interface \
             text-scaling-factor "$gnome_text_scaling_factor"
+  #gsettings set org.gnome.desktop.interface \
+            #scaling-factor "$gnome_scaling_factor"
 }
 
 ## BUG: seems this doesn't include decorations
@@ -135,9 +135,10 @@ case "$1" in
     esac
     ;;
 
-  work) set_scaling 1 1 1; layout_large ;;
-  home) set_scaling 1 1 1.5; layout_large ;;
-  lap) set_scaling 2 2 1; layout_small ;;
+  work) set_scaling 1 1; layout_large ;;
+  home) set_scaling 1 1.5; layout_large ;;
+  lap) set_scaling 1 1.5; layout_small ;;
+  #lap) set_scaling 2 1; layout_small ;;
 
   large)
     _active=$(xdotool getactivewindow)
