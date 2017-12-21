@@ -68,7 +68,7 @@ def calcfields(instream, calcspec, filter_rows, header):
     "Calculate new columns using python, calcspec: [(expr, header)...]"
     calcspec = list(calcspec)
     if header:
-        yield header + [h for _, h in calcspec]
+        yield header + ([] if filter_rows else [h for _, h in calcspec])
     for line in instream:
         exprs = [fn(*[line[i] for i in args]) for (fn, args), _ in calcspec]
         if not filter_rows:
@@ -133,9 +133,9 @@ def build_reader(args):
     if args.csv:
         return csv.reader(args.infile)
     elif len(args.delim) == 1:
-        return (l.rstrip("\r\n").split(args.delim) for l in args.infile)
+        return (l.rstrip("\r\n\t ").split(args.delim) for l in args.infile)
     _delim = re.compile(args.delim)
-    return (_delim.split(l.rstrip("\r\n")) for l in args.infile)
+    return (_delim.split(l.rstrip("\r\n\t ")) for l in args.infile)
 
 
 def build_writer(args, ostream):
