@@ -82,7 +82,7 @@ layout_large() {
   xdotool windowmove "$chromepersonalwin" 350 200
 
   local chromeworkwin=$(_get_winid chrome_work)
-  xdotool windowsize "$chromeworkwin" 73% 95%
+  xdotool windowsize "$chromeworkwin" 60% 95%
   xdotool windowmove "$chromeworkwin" 10 40
 }
 
@@ -108,10 +108,10 @@ layout_small() {
 
 
 layout_focus() {
-  local devvmwin=$(_get_winid devvm)
-  xdotool windowsize "$devvmwin" 50% 100%
+  win="$(xdotool selectwindow)"
+  xdotool windowsize "$win" 50% 100%
   local _x=$(($(_display_width) / 4 - 60))
-  xdotool windowmove "$devvmwin" "$_x" 0
+  xdotool windowmove "$win" "$_x" 0
 }
 
 
@@ -128,7 +128,6 @@ case "$1" in
 
   layout|lay)
     case "$2" in
-      focus) layout_focus ;;
       small) layout_small ;;
       large) layout_large ;;
       *) echo "usage: $0 layout < focus | small | large >" >&2 ;;
@@ -139,6 +138,8 @@ case "$1" in
   home) set_scaling 1 1.5; layout_large ;;
   lap) set_scaling 1 1.5; layout_small ;;
   #lap) set_scaling 2 1; layout_small ;;
+
+  focus) layout_focus ;;
 
   large)
     _active=$(xdotool getactivewindow)
