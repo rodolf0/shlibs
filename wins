@@ -14,22 +14,28 @@ show_scaling() {
   gsettings get org.gnome.desktop.interface text-scaling-factor
 }
 
-get_scaling() {
-  gsettings get org.gnome.settings-daemon.plugins.xsettings overrides |
-    grep -o "'Gdk/WindowScalingFactor': <[0-9.]\+>" |
-    sed 's!^.*<!!; s!>.*$!!'
+_get_scaling() {
+  gsettings get org.gnome.desktop.interface scaling-factor |
+    sed 's/^uint32 *//; s/ *$//'
 }
 
 set_scaling() {
   local gdk_window_scaling="$1"
   local gnome_text_scaling_factor="$2"
-  #local gnome_scaling_factor="$3"
+  local gnome_scaling_factor="$3"
+  local scaling_orig=$(_get_scaling)
   gsettings set org.gnome.settings-daemon.plugins.xsettings \
             overrides "{'Gdk/WindowScalingFactor': <${gdk_window_scaling}>}"
   gsettings set org.gnome.desktop.interface \
             text-scaling-factor "$gnome_text_scaling_factor"
-  #gsettings set org.gnome.desktop.interface \
-            #scaling-factor "$gnome_scaling_factor"
+  gsettings set org.gnome.desktop.interface \
+            scaling-factor "$gnome_scaling_factor"
+  if [ "$scaling_orig" != "$gnome_scaling_factor" ]; then
+    pkill -x gnome-shell
+    sleep 1
+    ( gnome-shell --replace >/dev/null 2>&1 & disown )
+    sleep 2
+  fi
 }
 
 ## BUG: seems this doesn't include decorations
@@ -117,40 +123,23 @@ layout_focus() {
 
 ## main
 case "$1" in
-  scr|screen)
-    case "$2" in
-      laptop) set_scaling 2 2 1 ;;
-      work) set_scaling 1 1 1 ;;
-      huge) set_scaling 1 1 1.5 ;;
-      *) echo "usage: $0 screen < laptop | work | huge >" >&2 ;;
-    esac
-    ;;
+  work) set_scaling 1 1 1; layout_large ;;
+  home) set_scaling 1 1.5 1; layout_large ;;
+  # high resolution but scale text, need to restart firefox to pickup change
+  lap) set_scaling 1 1.5 1; layout_small ;;
 
-  layout|lay)
-    case "$2" in
-      small) layout_small ;;
-      large) layout_large ;;
-      *) echo "usage: $0 layout < focus | small | large >" >&2 ;;
-    esac
-    ;;
+  # Idealy only want to change text-scaling-factor but requires firefox restart
+  # this adjusts 2x gdk scaling firefox but gnome window decorations look ugly
+  lap-2x) set_scaling 2 1 1; layout_small ;;
 
-  work) set_scaling 1 1; layout_large ;;
-  home) set_scaling 1 1.5; layout_large ;;
-  lap) set_scaling 1 1.5; layout_small ;;
-  #lap) set_scaling 2 1; layout_small ;;
+  # this adjusts 2x gdk scaling firefox + adjusts windows decor
+  # but requires restarting gnome-shell which is invasive
+  lap-2x-rescale) set_scaling 2 1 2; layout_small ;;
+
 
   focus) layout_focus ;;
-
-  large)
-    _active=$(xdotool getactivewindow)
-    xdotool windowsize "$_active" 50% 95% \
-            windowmove "$_active" "$(($(_display_width) / 4 - 60))" 0
-    ;;
-
   *)
-    echo -e "usage: $0 < work | home | lap >" >&2
-    echo -e "usage: $0 < screen | layout >\n" >&2
-    echo -e "usage: $0 < large >\n" >&2
+    echo -e "usage: $0 < work | home | lap | focus>" >&2
     show_scaling >&2
     ;;
 
