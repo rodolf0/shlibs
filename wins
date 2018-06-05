@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 
+
+## TODO reset
+#02:18:03 ~ 0 $ cat /tmp/outs
+#usage: ./wins < work | home | lap | focus>
+#settings daemon overrides: @a{sv} {}
+#gnome scaling factor: uint32 0
+#gnome text-scaling factor: 1.0
+
+
 set -e
 
 # chrome UI size is using: text-scaling-factor
@@ -24,18 +33,20 @@ set_scaling() {
   local gnome_text_scaling_factor="$2"
   local gnome_scaling_factor="$3"
   local scaling_orig=$(_get_scaling)
-  gsettings set org.gnome.settings-daemon.plugins.xsettings \
-            overrides "{'Gdk/WindowScalingFactor': <${gdk_window_scaling}>}"
+  if [ "$gdk_window_scaling" ]; then
+    gsettings set org.gnome.settings-daemon.plugins.xsettings \
+              overrides "{'Gdk/WindowScalingFactor': <${gdk_window_scaling}>}"
+  fi
   gsettings set org.gnome.desktop.interface \
             text-scaling-factor "$gnome_text_scaling_factor"
   gsettings set org.gnome.desktop.interface \
             scaling-factor "$gnome_scaling_factor"
-  if [ "$scaling_orig" != "$gnome_scaling_factor" ]; then
-    pkill -x gnome-shell
-    sleep 1
-    ( gnome-shell --replace >/dev/null 2>&1 & disown )
-    sleep 2
-  fi
+  #if [ "$scaling_orig" != "$gnome_scaling_factor" ]; then
+    #pkill -x gnome-shell
+    #sleep 1
+    #( gnome-shell --replace >/dev/null 2>&1 & disown )
+    #sleep 2
+  #fi
 }
 
 ## BUG: seems this doesn't include decorations
@@ -83,13 +94,13 @@ layout_large() {
   xdotool windowsize "$devvmwin" 72% 96% \
           windowmove "$devvmwin" 20 35
 
-  local chromepersonalwin=$(_get_winid chrome_personal)
-  xdotool windowsize "$chromepersonalwin" 45% 80%
-  xdotool windowmove "$chromepersonalwin" 350 200
+  #local chromepersonalwin=$(_get_winid chrome_personal)
+  #xdotool windowsize "$chromepersonalwin" 45% 80%
+  #xdotool windowmove "$chromepersonalwin" 350 200
 
-  local chromeworkwin=$(_get_winid chrome_work)
-  xdotool windowsize "$chromeworkwin" 60% 95%
-  xdotool windowmove "$chromeworkwin" 10 40
+  #local chromeworkwin=$(_get_winid chrome_work)
+  #xdotool windowsize "$chromeworkwin" 60% 95%
+  #xdotool windowmove "$chromeworkwin" 10 40
 }
 
 
@@ -103,13 +114,13 @@ layout_small() {
   xdotool windowsize "$devvmwin" 65% 96% \
           windowmove "$devvmwin" 20 50
 
-  local chromepersonalwin=$(_get_winid chrome_personal)
-  xdotool windowsize "$chromepersonalwin" 85% 90%
-  xdotool windowmove "$chromepersonalwin" 100 100
+  #local chromepersonalwin=$(_get_winid chrome_personal)
+  #xdotool windowsize "$chromepersonalwin" 85% 90%
+  #xdotool windowmove "$chromepersonalwin" 100 100
 
-  local chromeworkwin=$(_get_winid chrome_work)
-  xdotool windowsize "$chromeworkwin" 85% 90%
-  xdotool windowmove "$chromeworkwin" 120 90
+  #local chromeworkwin=$(_get_winid chrome_work)
+  #xdotool windowsize "$chromeworkwin" 85% 90%
+  #xdotool windowmove "$chromeworkwin" 120 90
 }
 
 
@@ -136,6 +147,7 @@ case "$1" in
   # but requires restarting gnome-shell which is invasive
   lap-2x-rescale) set_scaling 2 1 2; layout_small ;;
 
+  xx) set_scaling '' 0 1; layout_small ;;
 
   focus) layout_focus ;;
   *)

@@ -32,7 +32,7 @@ ctx() {
                     'nvim ~/notes/weekly.log.md'
     tmux new-window -d -t context: -n jupyter \
                     -c ~/Source/notebooks \
-                    'jupyter notebook --no-browser'
+                    'jupyter-lab --no-browser'
     tmux new-window -d -t context: -n ujarvis \
                     -c ~/Source/ujarvis \
                     'while sleep 1; do cargo build && ./target/debug/ujarvis; done'
