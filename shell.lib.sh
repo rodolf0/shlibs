@@ -36,8 +36,6 @@ ctx() {
     tmux new-window -d -t context: -n ujarvis \
                     -c ~/Source/ujarvis \
                     'while sleep 1; do cargo build && ./target/debug/ujarvis; done'
-    tmux new-window -d -t context: -n NATALIA \
-                    'nvim ~/notes/NATALIA.txt'
   fi
   # gain control of the session
   tmux -u -2 attach-session -d -t context
