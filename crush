@@ -8,11 +8,46 @@ import sys, os, re, csv, math
 
 from collections import defaultdict
 
-
 def reorder(istream, fields):
     "Select which fields from input stream are copied to output"
     for inline in istream:
         yield tuple(inline[f] for f in fields)
+
+
+def convdate(istream, datefields, outfmt, tz_in, tz_out):
+    from datetime import datetime, timezone
+    import pytz
+    AUTO_FORMATS = [
+        "%B %d, %Y at %I:%M%p",
+         "%a %b %d %H:%M:%S %Z %Y",
+         "%s",
+    ]
+    # parse input as if it were this timezone
+    tz_input = pytz.timezone(tz_in) if tz_in else None
+    # if input is timezone-aware, then format output in local-tz by default
+    tz_output = datetime.utcnow().astimezone().tzinfo if tz_input else None
+    # override default output-tz if we want something else than local
+    tz_output = pytz.timezone(tz_out) if tz_out else tz_output
+    # try multiple input formats
+    def tryparse(input_tm):
+        for fmt in AUTO_FORMATS:
+            try:
+                # ugly hack to parse timestamp
+                tm = (datetime.fromtimestamp(int(input_tm)) if fmt == "%s"
+                      else datetime.strptime(input_tm, fmt))
+                if tz_input:
+                    tm = tm.replace(tzinfo=tz_input)
+                if tz_output:
+                    tm = tm.astimezone(tz_output)
+                return tm.strftime(outfmt)
+            except ValueError:
+                pass
+        return "strptime-err"
+
+    # go through stream converting fields
+    for inline in istream:
+        yield tuple(tryparse(field) if i in datefields else field
+                    for i, field in enumerate(inline))
 
 
 def aggregate(istream, keys, pivots, aggregations, header):
@@ -180,6 +215,15 @@ def main():
     p.add_argument("infile", type=argparse.FileType('r'),
                    nargs="?", default=sys.stdin)
 
+    p = sp.add_parser("tm")
+    p.add_argument("--fields", "-f", required=True)
+    p.add_argument("--ofmt", "-o", default="%F %T%z",
+                   help="date output format")
+    p.add_argument("--itz", help="input timezone")
+    p.add_argument("--otz", help="output timezone")
+    p.add_argument("infile", type=argparse.FileType('r'),
+                   nargs="?", default=sys.stdin)
+
     p = sp.add_parser("agg")
     p.add_argument("--keys", "-k", metavar="{columns}")
     p.add_argument("--pivots", "-p", metavar="{columns}")
@@ -225,6 +269,12 @@ def main():
         if header:
             istream = itertools.chain([header], istream)
         owriter(reorder(istream, fields))
+
+    if args.command == "tm":
+        fields = parse_keyspec(args.fields, header)
+        if header:
+            istream = itertools.chain([header], istream)
+        owriter(convdate(istream, set(fields), args.ofmt, args.itz, args.otz))
 
     elif args.command == "agg":
         keys = parse_keyspec(args.keys, header) if args.keys else []
