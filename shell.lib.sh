@@ -6,18 +6,6 @@ gkill() {
   kill -TERM -$(ps -p "$1" -o pgid --no-headers)
 }
 
-# check if a pid is alive
-pid_alive() {
-  [ $# -eq 1 ] &&
-  ps h -p $1 &> /dev/null
-}
-
-# exit a script with verbose output to stder
-die() {
-  echo "$0: $@" >&2
-  exit 1
-}
-
 # attach to existing tmux session or create a new one
 tux() {
   local __tmuxsesid="$USER_$(hostname -s)"
@@ -39,71 +27,6 @@ ctx() {
   fi
   # gain control of the session
   tmux -u -2 attach-session -d -t context
-}
-
-# get last command output from tmux pane buffer
-lastout() {
-  tmux capture-pane -pJ -S - |
-    tac |
-    sed '0,/^..:..:.. .* \$/d' |
-    sed -n '/^..:..:.. .* \$/q; p' |
-    tac
-}
-
-# check that only one script executes with a user chosen lock-file
-# if the file exists but the pid is no longer alive the script may run
-# returns 0 on success, 1 on failure
-assert_single_instance() {
-  if [ $# -lt 1 ]; then
-    echo "Usage: assert_single_instance <lock-file> [remove-stale]"
-    return 1
-  fi
-
-  local lockfile="$1"
-  local remove="$2"
-
-  if [ -f "$lockfile" ]; then
-    if ps -p $(cat "$lockfile") &> /dev/null; then
-      echo "assert_single_instance: process already running" >&2
-      return 1
-    elif [ "$remove" != remove-stale ]; then
-      echo "assert_single_instance: stale lock exists... aborting" >&2
-      return 1
-    else
-      rm -f "$lockfile"
-    fi
-  fi
-
-  if (set -o noclobber; echo $$ > "$lockfile") &>/dev/null; then
-    return 0
-  fi
-  echo "assert_single_instance: another process got the lock" >&2
-  return 1
-}
-
-# print something in color (first arg indicates color)
-cprint() {
-  if [ $# -lt 2 ]; then
-    echo "usage: cprint <color> text..." >&2
-    return 1
-  fi
-  local red=$'\e''[0;31m'
-  local RED=$'\e''[1;31m'
-  local green=$'\e''[0;32m'
-  local GREEN=$'\e''[1;32m'
-  local yellow=$'\e''[0;33m'
-  local YELLOW=$'\e''[1;33m'
-  local blue=$'\e''[0;34m'
-  local BLUE=$'\e''[1;34m'
-  local magenta=$'\e''[0;35m'
-  local MAGENTA=$'\e''[1;35m'
-  local cyan=$'\e''[0;36m'
-  local CYAN=$'\e''[1;36m'
-  local gray=$'\e''[0;37m'
-  local GRAY=$'\e''[1;37m'
-  local NC=$'\e''[0m'
-  local color="$1"; shift
-  echo -e "${!color}$@${NC}"
 }
 
 # highlight some regex within stdout
@@ -128,6 +51,7 @@ hist() {
   eval history "$filter"
 }
 
+# add splits every 3 digits
 thousands() {
   sed ':a;s!\B[0-9]\{3\}\>!,&!; ta'
 }
@@ -142,74 +66,7 @@ topcmd() {
     head -"$count"
 }
 
-# clone stdout to a file
-logoutput() {
-  if [ $# -lt 1 ]; then
-    echo "usage: logoutput <logfile>" >&2
-    return 1
-  fi
-  local logfile="$1"; shift
-  local fifo=$(mktemp -u)
-  mkfifo "$fifo"
-  exec 64>&1
-  { tee "$logfile" < "$fifo" >&64; rm -f "$fifo"; } &
-  local teepid=$!
-  exec > "$fifo"
-
-  _stop_logging() {
-    exec >&64 64>&-
-    wait $teepid
-    unset _stop_logging
-  }
-  echo "run _stop_logging to end" >&2
-}
-
-# find file in current directory or parents recursively
-pfind() {
-  local sdir=.
-  local fname=
-  if [ $# -eq 1 ]; then
-    fname="$1"
-  elif [ $# -eq 2 ]; then
-    sdir="$1"
-    fname="$2"
-  else
-    echo "usage: pfind [start-dir] <fname>" >&2
-    return 1
-  fi
-
-  (cd "$sdir"
-    while [ "$PWD" != '/' ] && [ ! -e "$fname" ]; do cd ..; done
-    if [ -e "$fname" ]; then
-      echo "$PWD"
-    fi)
-}
-
-# quote "$@" args within single quotes
-__quote() {
-  local args=();
-  for x in "$@"; do
-    args+=("$(printf "'%s'" "$x")")
-  done
-  echo "${args[@]}"
-}
-
-x() {
-  xargs --no-run-if-empty --max-procs 10 -I__ sh -c "$(__quote "$@")"
-}
-
-puptime() {
-  if [ $# -lt 1 ]; then
-    echo "usage: puptime <pid>" >&2
-    return 1
-  fi
-  ps -o etime= -p "$1" |
-    sed 's/^ *//; s/-/:/; s/:/\n/g' |
-    tac |
-    tr '\n' : |
-    awk -F: '{print ($1 + $2*60 + $3*3600 + $4* 86400)}'
-}
-
+# encrypt a file
 encrypt() {
   if [ $# -lt 1 ]; then
     echo "usage: encrypt <infile>" >&2
@@ -221,4 +78,46 @@ encrypt() {
        --compress-algo zlib \
        --pinentry-mode loopback \
        --output "${infile}.gpg" --symmetric "$infile"
+}
+
+# find files I've edited in last x months
+my_hg_files() {
+  hg log --user "$USER" \
+    --date ">$(date -d '3 month ago' +%F)" \
+    --template '{files}\n' \
+    | tr ' ' '\n' \
+    | sort -u
+}
+
+# get frequency of input
+freq() {
+  sort | uniq -c | sort -nr
+}
+
+# get some stats of input
+stats() {
+  sort -n |
+    awk 'BEGIN{ i=0; t=0; }
+    NR == 1 {min=$1; max=$1}
+    NR > 1 && $1 < min { min = $1 }
+    NR > 1 && $1 > max { max = $1 }
+    { t+=$1; s[i]=$1; i++; }
+    END {
+      print NR, t/NR, min,
+      s[int(NR*0.01-0.5)],
+      s[int(NR*0.02-0.5)],
+      s[int(NR*0.05-0.5)],
+      s[int(NR*0.25-0.5)],
+      s[int(NR*0.50-0.5)],
+      s[int(NR*0.90-0.5)],
+      s[int(NR*0.95-0.5)],
+      s[int(NR*0.99-0.5)],
+      max
+    }' 2>/dev/null |
+    if [ "$1" = -h ]; then
+      { echo "count avg min p1 p2 p5 p25 p50 p90 p95 p99 max"; cat -; } |
+      column -t
+    else
+      cat -
+    fi
 }
