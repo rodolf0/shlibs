@@ -46,3 +46,11 @@ xhsort() {
             { read h; echo "$h"; sort "${newopts[@]}"; }
     fi
 }
+
+my_hg_files() {
+  hg log --user "$USER" \
+    --date ">$(date -d '3 month ago' +%F)" \
+    --template '{files}\n' \
+    | tr ' ' '\n' \
+    | sort -u
+}
