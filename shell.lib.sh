@@ -121,3 +121,17 @@ stats() {
       cat -
     fi
 }
+
+g() {
+  if ! [ -f "$HOME/.dirtree_cache" ]; then
+    echo "Missing ~/.dirtree_cache" >&2
+    echo "Add crontab:
+46 */2 * * * /bin/find <paths> -type d \
+-a \( \( -path '*/.*' -o -name buck-out \) -prune -o -print \) \
+2>/dev/null > ~/.dirtree_cache.tmp && \
+/bin/mv ~/.dirtree_cache.tmp ~/.dirtree_cache"
+    return 1
+  fi
+  local dest_path=$(cat "$HOME/.dirtree_cache" | fzf +m -q "$*")
+  [ -d "$dest_path" ] && cd "$dest_path" || cd "$(dirname "$dest_path")"
+}
