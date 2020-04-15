@@ -8,6 +8,7 @@ import sys, os, re, csv, math
 
 from collections import defaultdict
 
+
 def reorder(istream, fields):
     "Select which fields from input stream are copied to output"
     for inline in istream:
@@ -19,8 +20,8 @@ def convdate(istream, datefields, outfmt, tz_in, tz_out):
     import pytz
     AUTO_FORMATS = [
         "%B %d, %Y at %I:%M%p",
-         "%a %b %d %H:%M:%S %Z %Y",
-         "%s",
+        "%a %b %d %H:%M:%S %Z %Y",
+        "%s",
     ]
     # parse input as if it were this timezone
     tz_input = pytz.timezone(tz_in) if tz_in else None
@@ -28,6 +29,7 @@ def convdate(istream, datefields, outfmt, tz_in, tz_out):
     tz_output = datetime.utcnow().astimezone().tzinfo if tz_input else None
     # override default output-tz if we want something else than local
     tz_output = pytz.timezone(tz_out) if tz_out else tz_output
+
     # try multiple input formats
     def tryparse(input_tm):
         for fmt in AUTO_FORMATS:
@@ -115,9 +117,11 @@ def calcfields(instream, calcspec, filter_rows, header):
 def windows():
     pass
 
+
 def splitstream(istream, splitspec, bucketfn, outpath, outpat, header, wrmaker):
     "Split input stream into different files"
     wrote_headers = set()
+
     def _flush(bucket, stream):
         outfile = os.path.join(outpath, outpat.replace("%", bucket))
         with open(outfile, "a") as out:
@@ -185,12 +189,18 @@ def build_writer(args, ostream):
             ostream.writelines(args.odelim.join(l) + "\n" for l in istream)
             ostream.flush()
         return _odelim_writer
+
     # fixed-width column writer
     def _fixed_width_writer(istream):
-        istream = iter(istream) # treat lists and generators equally
+        istream = iter(istream)  # treat lists and generators equally
         normalized = list(itertools.islice(istream, 128))
         istream = itertools.chain(normalized, istream)
-        widths = [len(l) for l in normalized[0]] if len(normalized) > 0 else []
+        widths = [len(f) for f in normalized[0]] if len(normalized) > 0 else []
+        # Don't print alignment if single column
+        if len(widths) == 1:
+            ostream.writelines(l[0] + "\n" for l in istream)
+            ostream.flush()
+            return
         for line in normalized:
             widths = [max(widths[i], len(col)) for i, col in enumerate(line)]
         outfmt = '  '.join("{:<%d}" % w for i, w in enumerate(widths)) + "\n"
@@ -229,7 +239,7 @@ def main():
     p.add_argument("--pivots", "-p", metavar="{columns}")
     p.add_argument("--count", action="store_const", const='1')
     p.add_argument("--pct", metavar=('{pX}:{columns},...'), nargs='+')
-    for op in ['sum', 'avg', 'min', 'max', 'uniq']: # 'mode', 'gmean', 'var'
+    for op in ['sum', 'avg', 'min', 'max', 'uniq']:  # 'mode', 'gmean', 'var'
         p.add_argument("--%s" % op, metavar="{columns}")
     p.add_argument("infile", type=argparse.FileType('r'),
                    nargs="?", default=sys.stdin)
@@ -282,13 +292,13 @@ def main():
         aggregations = {
             'avg': parse_keyspec(args.avg, header),
             'count': [0] if args.count else [],
-            #'gmean': parse_keyspec(args.gmean, header),
+            # 'gmean': parse_keyspec(args.gmean, header),
             'max': parse_keyspec(args.max, header),
             'min': parse_keyspec(args.min, header),
-            #'mode': parse_keyspec(args.mode, header),
+            # 'mode': parse_keyspec(args.mode, header),
             'sum': parse_keyspec(args.sum, header),
             'uniq': parse_keyspec(args.uniq, header),
-            #'var': parse_keyspec(args.var, header),
+            # 'var': parse_keyspec(args.var, header),
         }
         if args.pct:
             for px in args.pct:
